@@ -10,8 +10,9 @@ dist
 .env
 .env.*
 
-# Only keep the single best-quality logo PNG from the design export
+# Only keep the single best-quality logo PNG from the design export, plus its metadata
 mamba/**
 !mamba/MAMBA-logo-original/
 !mamba/MAMBA-logo-original/icon-transparent/
 !mamba/MAMBA-logo-original/icon-transparent/original_1024_transparent.png
+!mamba/metadata.json

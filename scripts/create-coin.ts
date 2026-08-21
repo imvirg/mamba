@@ -13,7 +13,8 @@ import { loadWalletSecretBytes, resolveClusterEndpoint } from "./lib/solana";
 const CLUSTER = process.env.CLUSTER ?? "devnet"; // localhost | devnet | testnet | mainnet-beta
 const NAME = process.env.NAME ?? "MAMBA";
 const SYMBOL = process.env.SYMBOL ?? "MAMBA";
-const URI = process.env.URI ?? ""; // link to a hosted JSON metadata file (name/symbol/image)
+// Hosted JSON metadata file (name/symbol/image) — see mamba/metadata.json
+const URI = process.env.URI ?? "https://raw.githubusercontent.com/imvirg/mamba/main/mamba/metadata.json";
 const DECIMALS = Number(process.env.DECIMALS ?? 9);
 const SUPPLY = BigInt(process.env.SUPPLY ?? "100000000"); // whole tokens, not base units
 
