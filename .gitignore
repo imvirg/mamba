@@ -9,3 +9,9 @@ test-ledger
 dist
 .env
 .env.*
+
+# Only keep the single best-quality logo PNG from the design export
+mamba/**
+!mamba/MAMBA-logo-original/
+!mamba/MAMBA-logo-original/icon-transparent/
+!mamba/MAMBA-logo-original/icon-transparent/original_1024_transparent.png

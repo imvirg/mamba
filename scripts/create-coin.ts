@@ -7,6 +7,7 @@ import {
   percentAmount,
 } from "@metaplex-foundation/umi";
 import { createFungible, mintV1, TokenStandard } from "@metaplex-foundation/mpl-token-metadata";
+import { mplToolbox } from "@metaplex-foundation/mpl-toolbox";
 import { loadWalletSecretBytes, resolveClusterEndpoint } from "./lib/solana";
 
 const CLUSTER = process.env.CLUSTER ?? "devnet"; // localhost | devnet | testnet | mainnet-beta
@@ -18,7 +19,7 @@ const SUPPLY = BigInt(process.env.SUPPLY ?? "100000000"); // whole tokens, not b
 
 async function main() {
   const endpoint = resolveClusterEndpoint(CLUSTER);
-  const umi = createUmi(endpoint);
+  const umi = createUmi(endpoint).use(mplToolbox());
 
   const walletKeypair = umi.eddsa.createKeypairFromSecretKey(loadWalletSecretBytes());
   const payer = createSignerFromKeypair(umi, walletKeypair);
