@@ -1,7 +1,11 @@
 // Mints additional supply of an existing SPL token to a destination wallet.
 import { Connection, PublicKey } from "@solana/web3.js";
 import { getOrCreateAssociatedTokenAccount, mintTo } from "@solana/spl-token";
-import { loadWalletKeypair, requireEnv, resolveClusterEndpoint } from "./lib/solana";
+import {
+  loadWalletKeypair,
+  requireEnv,
+  resolveClusterEndpoint,
+} from "./lib/solana";
 
 const CLUSTER = process.env.CLUSTER ?? "localhost";
 const AMOUNT = BigInt(process.env.AMOUNT ?? "1000000000"); // in base units
@@ -14,10 +18,24 @@ async function main() {
   const payer = loadWalletKeypair();
   const owner = DEST ? new PublicKey(DEST) : payer.publicKey;
 
-  const tokenAccount = await getOrCreateAssociatedTokenAccount(connection, payer, mint, owner);
-  const sig = await mintTo(connection, payer, mint, tokenAccount.address, payer, AMOUNT);
+  const tokenAccount = await getOrCreateAssociatedTokenAccount(
+    connection,
+    payer,
+    mint,
+    owner
+  );
+  const sig = await mintTo(
+    connection,
+    payer,
+    mint,
+    tokenAccount.address,
+    payer,
+    AMOUNT
+  );
 
-  console.log(`Minted ${AMOUNT} base units of ${mint.toBase58()} to ${tokenAccount.address.toBase58()}`);
+  console.log(
+    `Minted ${AMOUNT} base units of ${mint.toBase58()} to ${tokenAccount.address.toBase58()}`
+  );
   console.log(`Tx: ${sig}`);
 }
 

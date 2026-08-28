@@ -6,7 +6,11 @@ import {
   generateSigner,
   percentAmount,
 } from "@metaplex-foundation/umi";
-import { createFungible, mintV1, TokenStandard } from "@metaplex-foundation/mpl-token-metadata";
+import {
+  createFungible,
+  mintV1,
+  TokenStandard,
+} from "@metaplex-foundation/mpl-token-metadata";
 import { mplToolbox } from "@metaplex-foundation/mpl-toolbox";
 import { loadWalletSecretBytes, resolveClusterEndpoint } from "./lib/solana";
 
@@ -14,7 +18,9 @@ const CLUSTER = process.env.CLUSTER ?? "devnet"; // localhost | devnet | testnet
 const NAME = process.env.NAME ?? "MAMBA";
 const SYMBOL = process.env.SYMBOL ?? "MAMBA";
 // Hosted JSON metadata file (name/symbol/image) — see mamba/metadata.json
-const URI = process.env.URI ?? "https://raw.githubusercontent.com/imvirg/mamba/main/mamba/metadata.json";
+const URI =
+  process.env.URI ??
+  "https://raw.githubusercontent.com/imvirg/mamba/main/mamba/metadata.json";
 const DECIMALS = Number(process.env.DECIMALS ?? 9);
 const SUPPLY = BigInt(process.env.SUPPLY ?? "100000000"); // whole tokens, not base units
 
@@ -22,7 +28,9 @@ async function main() {
   const endpoint = resolveClusterEndpoint(CLUSTER);
   const umi = createUmi(endpoint).use(mplToolbox());
 
-  const walletKeypair = umi.eddsa.createKeypairFromSecretKey(loadWalletSecretBytes());
+  const walletKeypair = umi.eddsa.createKeypairFromSecretKey(
+    loadWalletSecretBytes()
+  );
   const payer = createSignerFromKeypair(umi, walletKeypair);
   umi.use(keypairIdentity(payer));
 
