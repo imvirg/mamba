@@ -117,8 +117,16 @@ async function main() {
   const umiPayer = createSignerFromKeypair(umi, walletKeypair);
   umi.use(keypairIdentity(umiPayer));
 
+  // Metaplex's Create instruction requires the mint to co-sign even when the
+  // account already exists (MintIsNotSigner otherwise) — we hold the keypair
+  // in-process from phase 1, so just pass it through.
+  const mintSigner = createSignerFromKeypair(
+    umi,
+    umi.eddsa.createKeypairFromSecretKey(mintKeypair.secretKey)
+  );
+
   await createFungible(umi, {
-    mint: umiPublicKey(mintKeypair.publicKey.toBase58()),
+    mint: mintSigner,
     name: NAME,
     symbol: SYMBOL,
     uri: URI,
