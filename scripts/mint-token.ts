@@ -18,11 +18,23 @@ async function main() {
   const payer = loadWalletKeypair();
   const owner = DEST ? new PublicKey(DEST) : payer.publicKey;
 
+  // Mints can be legacy SPL Token or Token-2022 (e.g. MAMBA); read the owning
+  // program off the mint account instead of assuming one.
+  const mintAccountInfo = await connection.getAccountInfo(mint);
+  if (!mintAccountInfo) {
+    throw new Error(`Mint account not found: ${mint.toBase58()}`);
+  }
+  const programId = mintAccountInfo.owner;
+
   const tokenAccount = await getOrCreateAssociatedTokenAccount(
     connection,
     payer,
     mint,
-    owner
+    owner,
+    false,
+    "confirmed",
+    undefined,
+    programId
   );
   const sig = await mintTo(
     connection,
@@ -30,7 +42,10 @@ async function main() {
     mint,
     tokenAccount.address,
     payer,
-    AMOUNT
+    AMOUNT,
+    undefined,
+    undefined,
+    programId
   );
 
   console.log(
