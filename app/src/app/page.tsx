@@ -2,7 +2,8 @@
 
 import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
-import { Button } from "@/components/ui/button";
+import { MambaTokenCard } from "@/components/mamba-token-card";
+import { MambaBalanceCard } from "@/components/mamba-balance-card";
 
 // WalletMultiButton touches `window`, so it must be client-only, not SSR'd.
 const WalletMultiButton = dynamic(
@@ -32,18 +33,26 @@ export default function Home() {
           transition={{ duration: 0.5, delay: 0.1 }}
           className="max-w-md text-lg text-zinc-600 dark:text-zinc-400"
         >
-          Next.js + Tailwind + shadcn/ui + Framer Motion + Solana wallet
-          adapter, wired into the token_program Anchor workspace.
+          Connect a wallet to see live supply, transfer tax, and your MAMBA
+          balance.
         </motion.p>
 
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.2 }}
-          className="flex items-center gap-4"
         >
           <WalletMultiButton />
-          <Button variant="outline">Learn more</Button>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.3 }}
+          className="flex w-full flex-col items-center gap-4"
+        >
+          <MambaTokenCard />
+          <MambaBalanceCard />
         </motion.div>
       </main>
     </div>
