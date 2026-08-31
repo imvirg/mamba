@@ -1,5 +1,10 @@
 {
+  "name": "solana-mamba",
+  "private": true,
   "license": "ISC",
+  "workspaces": [
+    "app"
+  ],
   "scripts": {
     "lint:fix": "prettier */*.js \"*/**/*{.js,.ts}\" -w",
     "lint": "prettier */*.js \"*/**/*{.js,.ts}\" --check",
