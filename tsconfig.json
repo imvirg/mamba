@@ -8,8 +8,7 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "strict": true,
-    "rootDir": "scripts",
     "outDir": "dist"
   },
-  "include": ["scripts/**/*.ts"]
+  "include": ["scripts/**/*.ts", "shared/**/*.ts"]
 }

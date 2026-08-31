@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
 import { MambaTokenCard } from "@/components/mamba-token-card";
 import { MambaBalanceCard } from "@/components/mamba-balance-card";
+import { MambaSendCard } from "@/components/mamba-send-card";
 
 // WalletMultiButton touches `window`, so it must be client-only, not SSR'd.
 const WalletMultiButton = dynamic(
@@ -15,6 +17,8 @@ const WalletMultiButton = dynamic(
 );
 
 export default function Home() {
+  const [balanceRefreshKey, setBalanceRefreshKey] = useState(0);
+
   return (
     <div className="flex flex-1 flex-col items-center justify-center bg-zinc-50 font-sans dark:bg-black">
       <main className="flex w-full max-w-3xl flex-1 flex-col items-center justify-center gap-8 px-16 py-32 text-center">
@@ -52,7 +56,11 @@ export default function Home() {
           className="flex w-full flex-col items-center gap-4"
         >
           <MambaTokenCard />
-          <MambaBalanceCard />
+          <MambaBalanceCard refreshKey={balanceRefreshKey} />
+          <MambaSendCard
+            refreshKey={balanceRefreshKey}
+            onSent={() => setBalanceRefreshKey((k) => k + 1)}
+          />
         </motion.div>
       </main>
     </div>

@@ -5,9 +5,9 @@ import { useMambaTokenStats, useMambaWalletBalance } from "@/lib/use-mamba-token
 import { MAMBA_MINT, MAMBA_SYMBOL } from "@/lib/mamba-config";
 import { formatTokenAmount } from "@/lib/format";
 
-export function MambaBalanceCard() {
+export function MambaBalanceCard({ refreshKey = 0 }: { refreshKey?: number }) {
   const { connected } = useWallet();
-  const balance = useMambaWalletBalance();
+  const balance = useMambaWalletBalance(refreshKey);
   const stats = useMambaTokenStats();
 
   if (!MAMBA_MINT) return null;

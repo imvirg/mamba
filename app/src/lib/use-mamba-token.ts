@@ -94,12 +94,14 @@ export function useMambaTokenStats(): LoadState<MambaTokenStats> {
   });
 }
 
-export function useMambaWalletBalance(): LoadState<bigint> {
+// refreshKey lets a caller force a refetch (e.g. after sending a transfer)
+// by bumping it, since the mint/wallet pair alone wouldn't otherwise change.
+export function useMambaWalletBalance(refreshKey = 0): LoadState<bigint> {
   const { connection } = useConnection();
   const { publicKey } = useWallet();
   const key =
     MAMBA_MINT && publicKey
-      ? `${MAMBA_MINT.toBase58()}:${publicKey.toBase58()}`
+      ? `${MAMBA_MINT.toBase58()}:${publicKey.toBase58()}:${refreshKey}`
       : null;
 
   return useKeyedAsync(key, async () => {
