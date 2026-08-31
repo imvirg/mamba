@@ -9,9 +9,16 @@ import {
   getAssociatedTokenAddressSync,
   TOKEN_2022_PROGRAM_ID,
 } from "@solana/spl-token";
-import { useMambaTokenStats, useMambaWalletBalance } from "@/lib/use-mamba-token";
+import {
+  useMambaTokenStats,
+  useMambaWalletBalance,
+} from "@/lib/use-mamba-token";
 import { MAMBA_MINT, MAMBA_SYMBOL, explorerTxUrl } from "@/lib/mamba-config";
-import { parseTokenAmount, tokenAmountToInputValue, truncateAddress } from "@/lib/format";
+import {
+  parseTokenAmount,
+  tokenAmountToInputValue,
+  truncateAddress,
+} from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -130,7 +137,10 @@ export function MambaSendCard({
       }).add(...instructions);
 
       const signature = await sendTransaction(tx, connection);
-      await connection.confirmTransaction({ signature, ...latestBlockhash }, "confirmed");
+      await connection.confirmTransaction(
+        { signature, ...latestBlockhash },
+        "confirmed"
+      );
 
       setStatus({ phase: "success", signature });
       setAmount("");
@@ -158,7 +168,10 @@ export function MambaSendCard({
         <>
           <form onSubmit={handleSubmit} className="mt-3 flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="recipient" className="text-xs text-muted-foreground">
+              <label
+                htmlFor="recipient"
+                className="text-xs text-muted-foreground"
+              >
                 Recipient address
               </label>
               <Input
@@ -174,7 +187,10 @@ export function MambaSendCard({
 
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between">
-                <label htmlFor="amount" className="text-xs text-muted-foreground">
+                <label
+                  htmlFor="amount"
+                  className="text-xs text-muted-foreground"
+                >
                   Amount
                 </label>
                 <Button

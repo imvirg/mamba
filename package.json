@@ -6,8 +6,8 @@
     "app"
   ],
   "scripts": {
-    "lint:fix": "prettier */*.js \"*/**/*{.js,.ts}\" -w",
-    "lint": "prettier */*.js \"*/**/*{.js,.ts}\" --check",
+    "lint:fix": "prettier */*.js \"*/**/*{.js,.jsx,.ts,.tsx}\" -w",
+    "lint": "prettier */*.js \"*/**/*{.js,.jsx,.ts,.tsx}\" --check",
     "create-token": "ts-node scripts/create-token.ts",
     "mint-token": "ts-node scripts/mint-token.ts",
     "create-coin": "ts-node scripts/create-coin.ts"

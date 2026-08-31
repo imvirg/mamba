@@ -1,7 +1,10 @@
 "use client";
 
 import { useWallet } from "@solana/wallet-adapter-react";
-import { useMambaTokenStats, useMambaWalletBalance } from "@/lib/use-mamba-token";
+import {
+  useMambaTokenStats,
+  useMambaWalletBalance,
+} from "@/lib/use-mamba-token";
 import { MAMBA_MINT, MAMBA_SYMBOL } from "@/lib/mamba-config";
 import { formatTokenAmount } from "@/lib/format";
 
@@ -20,11 +23,12 @@ export function MambaBalanceCard({ refreshKey = 0 }: { refreshKey?: number }) {
           Connect your wallet to see your {MAMBA_SYMBOL} balance
         </p>
       )}
-      {connected && (balance.status === "loading" || stats.status === "loading") && (
-        <p className="mt-1 text-lg font-medium text-card-foreground">
-          Loading…
-        </p>
-      )}
+      {connected &&
+        (balance.status === "loading" || stats.status === "loading") && (
+          <p className="mt-1 text-lg font-medium text-card-foreground">
+            Loading…
+          </p>
+        )}
       {connected && balance.status === "error" && (
         <p className="mt-1 text-sm text-destructive">
           Couldn&apos;t load balance: {balance.error}
