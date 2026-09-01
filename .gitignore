@@ -16,3 +16,4 @@ mamba/**
 !mamba/MAMBA-logo-original/icon-transparent/
 !mamba/MAMBA-logo-original/icon-transparent/original_1024_transparent.png
 !mamba/metadata.json
+!mamba/audit-readiness.md

@@ -10,7 +10,8 @@
     "lint": "prettier */*.js \"*/**/*{.js,.jsx,.ts,.tsx}\" --check",
     "create-token": "ts-node scripts/create-token.ts",
     "mint-token": "ts-node scripts/mint-token.ts",
-    "create-coin": "ts-node scripts/create-coin.ts"
+    "create-coin": "ts-node scripts/create-coin.ts",
+    "verify-authorities": "ts-node scripts/verify-authorities.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.31.1",
