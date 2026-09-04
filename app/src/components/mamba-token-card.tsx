@@ -34,8 +34,10 @@ export function MambaTokenCard() {
           className="rounded-full"
         />
         <div>
-          <p className="font-semibold text-card-foreground">{MAMBA_NAME}</p>
-          <p className="text-sm text-muted-foreground">${MAMBA_SYMBOL}</p>
+          <p className="font-semibold text-card-foreground">Token overview</p>
+          <p className="text-sm text-muted-foreground">
+            {MAMBA_NAME} · ${MAMBA_SYMBOL}
+          </p>
         </div>
       </div>
 

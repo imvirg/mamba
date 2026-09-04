@@ -6,7 +6,7 @@ import {
 } from "../../../shared/mamba";
 
 export { MAMBA_NAME, MAMBA_SYMBOL };
-export const MAMBA_LOGO_URL = "/mamba-logo.png";
+export const MAMBA_LOGO_URL = "/mamba-snake.webp";
 
 export const SOLANA_CLUSTER =
   process.env.NEXT_PUBLIC_SOLANA_CLUSTER ?? "devnet";
