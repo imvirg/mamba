@@ -25,6 +25,8 @@ import {
   createInitializeMintInstruction,
   createSetAuthorityInstruction,
   getOrCreateAssociatedTokenAccount,
+  getMint,
+  getTransferFeeConfig,
   mintTo,
 } from "@solana/spl-token";
 import { createUmi } from "@metaplex-foundation/umi-bundle-defaults";
@@ -39,10 +41,26 @@ import { mplToolbox } from "@metaplex-foundation/mpl-toolbox";
 import {
   loadWalletKeypair,
   loadWalletSecretBytes,
+  requireEnv,
   resolveClusterEndpoint,
 } from "./lib/solana";
+import {
+  loadSquadsAuthorityConfig,
+  validateSquadsAuthority,
+} from "./lib/authority";
+import {
+  assertFinalMintState,
+  assertPreMintState,
+} from "./lib/mint-validation";
+import { createLaunchState, updateLaunchState } from "./lib/launch-state-store";
+import { createMintSigner, loadMintSigner } from "./lib/mint-signer";
+import { MAMBA_MAINNET_AUTHORITY } from "../shared/mamba";
 
 const CLUSTER = process.env.CLUSTER ?? "devnet"; // localhost | devnet | testnet | mainnet-beta
+const LAUNCH_ID = process.env.LAUNCH_ID;
+const LAUNCH_STATE = process.env.LAUNCH_STATE;
+const MINT_SIGNER_PATH = process.env.MINT_SIGNER_PATH;
+const ALLOWED_CLUSTERS = ["localhost", "devnet", "testnet", "mainnet-beta"];
 const NAME = process.env.NAME ?? "MAMBA";
 const SYMBOL = process.env.SYMBOL ?? "MAMBA";
 // Hosted JSON metadata file (name/symbol/image) — see mamba/metadata.json
@@ -62,6 +80,18 @@ const TRANSFER_FEE_MAX_BASE_UNITS = BigInt(
 );
 
 async function main() {
+  const cluster = requireEnv("CLUSTER");
+  if (cluster !== CLUSTER) {
+    throw new Error("CLUSTER must be set explicitly for create-coin");
+  }
+  if (!ALLOWED_CLUSTERS.includes(cluster)) {
+    throw new Error(
+      `Unsupported cluster: ${cluster}. Allowed: ${ALLOWED_CLUSTERS.join(", ")}`
+    );
+  }
+  const launchId = requireEnv("LAUNCH_ID");
+  const launchStatePath = requireEnv("LAUNCH_STATE");
+  const mintSignerPath = requireEnv("MINT_SIGNER_PATH");
   if (
     !Number.isInteger(TRANSFER_FEE_BPS) ||
     TRANSFER_FEE_BPS < 0 ||
@@ -70,26 +100,57 @@ async function main() {
     throw new Error("TRANSFER_FEE_BPS must be an integer between 0 and 10000");
   }
 
+  const authorityMultisig = new PublicKey(requireEnv("AUTHORITY_MULTISIG"));
+  if (
+    CLUSTER === "mainnet-beta" &&
+    !authorityMultisig.equals(new PublicKey(MAMBA_MAINNET_AUTHORITY))
+  ) {
+    throw new Error(
+      `AUTHORITY_MULTISIG is not the approved mainnet governance authority: ${MAMBA_MAINNET_AUTHORITY}`
+    );
+  }
   const endpoint = resolveClusterEndpoint(CLUSTER);
   const connection = new Connection(endpoint, "confirmed");
   const payer = loadWalletKeypair();
+  const authorityConfig = loadSquadsAuthorityConfig(authorityMultisig);
+  if (CLUSTER === "mainnet-beta") {
+    await validateSquadsAuthority(connection, authorityConfig);
+  }
   const mintKeypair = Keypair.generate();
   const baseUnits = SUPPLY * 10n ** BigInt(DECIMALS);
 
+  const preparedAt = new Date().toISOString();
+  createLaunchState(launchStatePath, {
+    schemaVersion: 1,
+    launchId,
+    phase: "prepared",
+    cluster: cluster as "localhost" | "devnet" | "testnet" | "mainnet-beta",
+    mintPublicKey: mintKeypair.publicKey.toBase58(),
+    mintSignerKeyRef: mintSignerPath,
+    payerPublicKey: payer.publicKey.toBase58(),
+    authorityMultisig: authorityMultisig.toBase58(),
+    expectedMultisig: authorityConfig.multisig.toBase58(),
+    expectedThreshold: authorityConfig.threshold,
+    expectedMembers: authorityConfig.members.map((member) => member.toBase58()),
+    decimals: DECIMALS,
+    supplyWholeTokens: SUPPLY.toString(),
+    supplyBaseUnits: baseUnits.toString(),
+    metadata: { name: NAME, symbol: SYMBOL, uri: URI },
+    transactions: {
+      mintInitialization: null,
+      metadataAttachment: null,
+      initialMint: null,
+      authorityRevocation: null,
+    },
+    createdAt: preparedAt,
+    updatedAt: preparedAt,
+  });
+  createMintSigner(mintSignerPath, mintKeypair);
+
   // Authority story (see mamba/ project memory): mint authority is revoked
   // after the initial mint (fixed supply forever), freeze authority is never
-  // set, and the tax/burn authorities move to a multisig instead of staying
-  // on this hot wallet. AUTHORITY_MULTISIG must be set before a real launch —
-  // it falls back to the payer here only so devnet dry-runs still work.
-  const authorityMultisig = process.env.AUTHORITY_MULTISIG
-    ? new PublicKey(process.env.AUTHORITY_MULTISIG)
-    : payer.publicKey;
-  if (!process.env.AUTHORITY_MULTISIG) {
-    console.warn(
-      "WARNING: AUTHORITY_MULTISIG not set — transfer-fee-config and withdraw-withheld " +
-        "authorities will default to the hot wallet payer key. Do not use this for a real launch."
-    );
-  }
+  // set, and the tax/burn authorities move to the explicitly configured
+  // multisig instead of staying on this hot wallet.
 
   console.log(`Creating "${NAME}" (${SYMBOL}) on ${CLUSTER} as Token-2022`);
   console.log(`Payer: ${payer.publicKey.toBase58()}`);
@@ -127,10 +188,23 @@ async function main() {
       TOKEN_2022_PROGRAM_ID
     )
   );
+  const mintSubmittedAt = new Date().toISOString();
   const mintSig = await sendAndConfirmTransaction(connection, createMintTx, [
     payer,
     mintKeypair,
   ]);
+  updateLaunchState(launchStatePath, (state) => ({
+    ...state,
+    phase: "mint_initialized",
+    transactions: {
+      ...state.transactions,
+      mintInitialization: {
+        signature: mintSig,
+        submittedAt: mintSubmittedAt,
+        outcome: "confirmed",
+      },
+    },
+  }));
   console.log(`Mint initialized. Tx: ${mintSig}`);
 
   // Phase 2: attach Metaplex name/symbol/logo metadata to the existing mint.
@@ -146,7 +220,9 @@ async function main() {
   // in-process from phase 1, so just pass it through.
   const mintSigner = createSignerFromKeypair(
     umi,
-    umi.eddsa.createKeypairFromSecretKey(mintKeypair.secretKey)
+    umi.eddsa.createKeypairFromSecretKey(
+      loadMintSigner(mintSignerPath, mintKeypair.publicKey).secretKey
+    )
   );
 
   await createFungible(umi, {
@@ -161,6 +237,36 @@ async function main() {
   console.log("Metadata attached");
 
   // Phase 3: mint the initial supply to the payer.
+  const preMintAccount = await connection.getAccountInfo(
+    mintKeypair.publicKey,
+    "confirmed"
+  );
+  if (!preMintAccount) {
+    throw new Error(
+      `Mint account not found before initial mint: ${mintKeypair.publicKey.toBase58()}`
+    );
+  }
+  const preMint = await getMint(
+    connection,
+    mintKeypair.publicKey,
+    "confirmed",
+    TOKEN_2022_PROGRAM_ID
+  );
+  assertPreMintState(
+    {
+      accountOwner: preMintAccount.owner,
+      supply: preMint.supply,
+      decimals: preMint.decimals,
+      mintAuthority: preMint.mintAuthority,
+      freezeAuthority: preMint.freezeAuthority,
+      transferFeeConfig: getTransferFeeConfig(preMint),
+    },
+    {
+      mintAuthority: payer.publicKey,
+      authority: authorityMultisig,
+      decimals: DECIMALS,
+    }
+  );
   const tokenAccount = await getOrCreateAssociatedTokenAccount(
     connection,
     payer,
@@ -201,6 +307,36 @@ async function main() {
     connection,
     revokeMintAuthTx,
     [payer]
+  );
+  const finalMintAccount = await connection.getAccountInfo(
+    mintKeypair.publicKey,
+    "confirmed"
+  );
+  if (!finalMintAccount) {
+    throw new Error(
+      `Mint account not found during final verification: ${mintKeypair.publicKey.toBase58()}`
+    );
+  }
+  const finalMint = await getMint(
+    connection,
+    mintKeypair.publicKey,
+    "confirmed",
+    TOKEN_2022_PROGRAM_ID
+  );
+  assertFinalMintState(
+    {
+      accountOwner: finalMintAccount.owner,
+      supply: finalMint.supply,
+      decimals: finalMint.decimals,
+      mintAuthority: finalMint.mintAuthority,
+      freezeAuthority: finalMint.freezeAuthority,
+      transferFeeConfig: getTransferFeeConfig(finalMint),
+    },
+    {
+      authority: authorityMultisig,
+      supply: baseUnits,
+      decimals: DECIMALS,
+    }
   );
   console.log(`Mint authority revoked. Tx: ${revokeSig}`);
 

@@ -29,3 +29,14 @@ export function requireEnv(name: string): string {
   }
   return value;
 }
+
+export function requireNonProductionCluster(
+  cluster: string,
+  scriptName: string
+): void {
+  if (cluster === "testnet" || cluster === "mainnet-beta") {
+    throw new Error(
+      `${scriptName} is restricted to localhost or devnet; use the governed launch flow for ${cluster}`
+    );
+  }
+}

@@ -4,6 +4,7 @@ import { getOrCreateAssociatedTokenAccount, mintTo } from "@solana/spl-token";
 import {
   loadWalletKeypair,
   requireEnv,
+  requireNonProductionCluster,
   resolveClusterEndpoint,
 } from "./lib/solana";
 
@@ -12,6 +13,7 @@ const AMOUNT = BigInt(process.env.AMOUNT ?? "1000000000"); // in base units
 const DEST = process.env.DEST; // optional: base58 owner pubkey, defaults to payer
 
 async function main() {
+  requireNonProductionCluster(CLUSTER, "mint-token");
   const mint = new PublicKey(requireEnv("MINT"));
   const endpoint = resolveClusterEndpoint(CLUSTER);
   const connection = new Connection(endpoint, "confirmed");

@@ -8,16 +8,36 @@ import {
   getMint,
   getTransferFeeConfig,
 } from "@solana/spl-token";
+import { accounts, getVaultPda, PROGRAM_ID, types } from "@sqds/multisig";
 import { resolveClusterEndpoint } from "../shared/mamba";
 import { requireEnv } from "./lib/solana";
+import { requireTransferFeeConfig } from "./lib/mint-validation";
 
 const CLUSTER = process.env.CLUSTER ?? "mainnet-beta"; // localhost | devnet | testnet | mainnet-beta
 const MINT = new PublicKey(requireEnv("MINT"));
-// Optional: the expected multisig/vault address for the tax authorities.
-// Without it, the script just reports what it finds instead of pass/failing.
-const EXPECTED_AUTHORITY = process.env.EXPECTED_AUTHORITY
-  ? new PublicKey(process.env.EXPECTED_AUTHORITY)
-  : null;
+const EXPECTED_MULTISIG = new PublicKey(requireEnv("EXPECTED_MULTISIG"));
+const EXPECTED_AUTHORITY = new PublicKey(requireEnv("EXPECTED_AUTHORITY"));
+const expectedThreshold = Number(requireEnv("EXPECTED_THRESHOLD"));
+const expectedMembers = requireEnv("EXPECTED_MEMBERS")
+  .split(",")
+  .map((member) => new PublicKey(member.trim()));
+
+if (
+  !Number.isInteger(expectedThreshold) ||
+  expectedThreshold < 2 ||
+  expectedThreshold > expectedMembers.length
+) {
+  throw new Error(
+    "EXPECTED_THRESHOLD must be an integer between 2 and EXPECTED_MEMBERS count"
+  );
+}
+
+if (
+  new Set(expectedMembers.map((member) => member.toBase58())).size !==
+  expectedMembers.length
+) {
+  throw new Error("EXPECTED_MEMBERS must not contain duplicate public keys");
+}
 
 function report(label: string, ok: boolean | null, detail: string) {
   const status = ok === null ? "INFO" : ok ? "PASS" : "FAIL";
@@ -30,6 +50,74 @@ async function main() {
     resolveClusterEndpoint(CLUSTER),
     "confirmed"
   );
+  const multisigInfo = await connection.getAccountInfo(EXPECTED_MULTISIG);
+  if (!multisigInfo) {
+    throw new Error(
+      `Expected multisig account not found: ${EXPECTED_MULTISIG.toBase58()}`
+    );
+  }
+  if (!multisigInfo.owner.equals(PROGRAM_ID)) {
+    throw new Error(
+      `Expected multisig is not owned by the Squads program: ${multisigInfo.owner.toBase58()}`
+    );
+  }
+  const multisig = await accounts.Multisig.fromAccountAddress(
+    connection,
+    EXPECTED_MULTISIG,
+    "confirmed"
+  );
+  const voterCount = multisig.members.filter(
+    (member) =>
+      (member.permissions.mask & types.Permission.Vote) ===
+      types.Permission.Vote
+  ).length;
+  const actualVoters = multisig.members
+    .filter(
+      (member) =>
+        (member.permissions.mask & types.Permission.Vote) ===
+        types.Permission.Vote
+    )
+    .map((member) => member.key.toBase58())
+    .sort();
+  const configuredVoters = expectedMembers
+    .map((member) => member.toBase58())
+    .sort();
+  console.log(
+    `Squads multisig: ${
+      multisig.threshold
+    }-of-${voterCount} voters; members: ${multisig.members
+      .map((member) => member.key.toBase58())
+      .join(", ")}`
+  );
+  if (voterCount < 2 || multisig.threshold < 2) {
+    throw new Error(
+      "Expected authority must have at least two voters and a threshold of at least two"
+    );
+  }
+  if (multisig.threshold !== expectedThreshold) {
+    throw new Error(
+      `Multisig threshold mismatch: expected ${expectedThreshold}, found ${multisig.threshold}`
+    );
+  }
+  if (
+    actualVoters.length !== configuredVoters.length ||
+    actualVoters.some((member, index) => member !== configuredVoters[index])
+  ) {
+    throw new Error(
+      `Multisig voter set mismatch: expected ${configuredVoters.join(
+        ", "
+      )}, found ${actualVoters.join(", ")}`
+    );
+  }
+  const [vaultPda] = getVaultPda({
+    multisigPda: EXPECTED_MULTISIG,
+    index: 0,
+  });
+  if (!vaultPda.equals(EXPECTED_AUTHORITY)) {
+    throw new Error(
+      `Expected authority does not match Squads vault 0: ${vaultPda.toBase58()}`
+    );
+  }
   const mint = await getMint(
     connection,
     MINT,
@@ -37,6 +125,7 @@ async function main() {
     TOKEN_2022_PROGRAM_ID
   );
   const feeConfig = getTransferFeeConfig(mint);
+  requireTransferFeeConfig(feeConfig);
 
   console.log(`Verifying ${MINT.toBase58()} on ${CLUSTER}\n`);
 
@@ -57,33 +146,26 @@ async function main() {
     ),
   ];
 
-  if (feeConfig) {
-    const feeAuthOk = EXPECTED_AUTHORITY
-      ? feeConfig.transferFeeConfigAuthority?.equals(EXPECTED_AUTHORITY) ??
-        false
-      : null;
-    const withdrawAuthOk = EXPECTED_AUTHORITY
-      ? feeConfig.withdrawWithheldAuthority?.equals(EXPECTED_AUTHORITY) ?? false
-      : null;
-    results.push(
-      report(
-        "Transfer-fee-config authority",
-        feeAuthOk,
-        feeConfig.transferFeeConfigAuthority?.toBase58() ?? "unset"
-      ),
-      report(
-        "Withdraw-withheld authority",
-        withdrawAuthOk,
-        feeConfig.withdrawWithheldAuthority?.toBase58() ?? "unset"
-      )
-    );
-    console.log(
-      `\nCurrent transfer fee: ${feeConfig.olderTransferFee.transferFeeBasisPoints} bps (older), ` +
-        `${feeConfig.newerTransferFee.transferFeeBasisPoints} bps (newer, epoch ${feeConfig.newerTransferFee.epoch})`
-    );
-  } else {
-    console.log("\nNo TransferFeeConfig extension found on this mint.");
-  }
+  const feeAuthOk =
+    feeConfig.transferFeeConfigAuthority?.equals(EXPECTED_AUTHORITY) ?? false;
+  const withdrawAuthOk =
+    feeConfig.withdrawWithheldAuthority?.equals(EXPECTED_AUTHORITY) ?? false;
+  results.push(
+    report(
+      "Transfer-fee-config authority",
+      feeAuthOk,
+      feeConfig.transferFeeConfigAuthority?.toBase58() ?? "unset"
+    ),
+    report(
+      "Withdraw-withheld authority",
+      withdrawAuthOk,
+      feeConfig.withdrawWithheldAuthority?.toBase58() ?? "unset"
+    )
+  );
+  console.log(
+    `\nCurrent transfer fee: ${feeConfig.olderTransferFee.transferFeeBasisPoints} bps (older), ` +
+      `${feeConfig.newerTransferFee.transferFeeBasisPoints} bps (newer, epoch ${feeConfig.newerTransferFee.epoch})`
+  );
 
   const failed = results.some((r) => r === false);
   if (failed) {

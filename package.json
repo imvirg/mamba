@@ -7,11 +7,16 @@
   ],
   "scripts": {
     "lint:fix": "prettier */*.js \"*/**/*{.js,.jsx,.ts,.tsx}\" -w",
-    "lint": "prettier */*.js \"*/**/*{.js,.jsx,.ts,.tsx}\" --check",
+    "lint": "prettier \"scripts/**/*.ts\" \"shared/**/*.ts\" \"tests/**/*.ts\" --check",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "create-token": "ts-node scripts/create-token.ts",
     "mint-token": "ts-node scripts/mint-token.ts",
     "create-coin": "ts-node scripts/create-coin.ts",
-    "verify-authorities": "ts-node scripts/verify-authorities.ts"
+    "verify-authorities": "ts-node scripts/verify-authorities.ts",
+    "launch-status": "ts-node scripts/launch-status.ts",
+    "validate:launch": "ts-node scripts/validate-launch-readiness.ts",
+    "validate:launch:strict": "STRICT_LAUNCH=1 ts-node scripts/validate-launch-readiness.ts",
+    "test": "ts-mocha \"tests/**/*.test.ts\""
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.31.1",
