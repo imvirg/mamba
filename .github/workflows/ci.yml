@@ -37,5 +37,13 @@ jobs:
         with:
           node-version: "24"
       - run: npm ci
-      - name: lint
+      - name: Root tests
+        run: npm test
+      - name: Root typecheck
+        run: npm run typecheck
+      - name: Root lint
         run: npm run lint
+      - name: App typecheck
+        run: npm run typecheck --workspace app
+      - name: App lint
+        run: npm run lint --workspace app
