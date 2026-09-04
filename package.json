@@ -6,7 +6,7 @@
     "app"
   ],
   "scripts": {
-    "lint:fix": "prettier */*.js \"*/**/*{.js,.jsx,.ts,.tsx}\" -w",
+    "lint:fix": "prettier \"scripts/**/*.ts\" \"shared/**/*.ts\" \"tests/**/*.ts\" -w",
     "lint": "prettier \"scripts/**/*.ts\" \"shared/**/*.ts\" \"tests/**/*.ts\" --check",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "create-token": "ts-node scripts/create-token.ts",
