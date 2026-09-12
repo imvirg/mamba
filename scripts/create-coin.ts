@@ -41,7 +41,6 @@ import { createFungible } from "@metaplex-foundation/mpl-token-metadata";
 import { mplToolbox } from "@metaplex-foundation/mpl-toolbox";
 import {
   loadWalletKeypair,
-  loadWalletSecretBytes,
   requireEnv,
   resolveClusterEndpoint,
 } from "./lib/solana";
@@ -194,9 +193,7 @@ async function main() {
 
   // Phase 2: attach Metaplex name/symbol/logo metadata to the existing mint.
   const umi = createUmi(endpoint).use(mplToolbox());
-  const walletKeypair = umi.eddsa.createKeypairFromSecretKey(
-    loadWalletSecretBytes()
-  );
+  const walletKeypair = umi.eddsa.createKeypairFromSecretKey(payer.secretKey);
   const umiPayer = createSignerFromKeypair(umi, walletKeypair);
   umi.use(keypairIdentity(umiPayer));
 

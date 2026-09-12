@@ -102,14 +102,16 @@ if (!authorityMultisig && cluster === "devnet") {
 }
 
 async function finishValidation(): Promise<void> {
-  if (authorityMultisig && cluster === "mainnet-beta") {
+  if (authorityMultisig && cluster !== "localhost") {
     const authority = new PublicKey(authorityMultisig);
     const config = loadSquadsAuthorityConfig(authority);
-    const connection = new Connection(
-      resolveClusterEndpoint(cluster),
-      "confirmed"
-    );
-    await validateSquadsAuthority(connection, config);
+    if (cluster === "mainnet-beta") {
+      const connection = new Connection(
+        resolveClusterEndpoint(cluster),
+        "confirmed"
+      );
+      await validateSquadsAuthority(connection, config);
+    }
   }
 
   if (authorityMultisig && cluster === "devnet") {

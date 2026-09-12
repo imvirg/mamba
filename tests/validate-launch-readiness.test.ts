@@ -62,6 +62,19 @@ describe("validate-launch-readiness", () => {
     expect(result.output).to.contain("AUTHORITY_MULTISIG is required");
   });
 
+  it("requires expected governance configuration for a devnet authority", () => {
+    const result = runValidator({
+      CLUSTER: "devnet",
+      AUTHORITY_MULTISIG: "11111111111111111111111111111111",
+      EXPECTED_MULTISIG: undefined,
+      EXPECTED_THRESHOLD: undefined,
+      EXPECTED_MEMBERS: undefined,
+    });
+
+    expect(result.status).to.equal(1);
+    expect(result.output).to.contain("Set EXPECTED_THRESHOLD=<value> env var");
+  });
+
   it("rejects an unapproved mainnet authority", () => {
     const result = runValidator({
       CLUSTER: "mainnet-beta",
