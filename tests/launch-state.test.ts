@@ -118,6 +118,30 @@ describe("launch state", () => {
     );
   });
 
+  it("rejects unknown or rejected checkpoints in a verified state", () => {
+    const confirmed = {
+      signature: "signature",
+      submittedAt: "2026-09-03T00:00:00.000Z",
+      outcome: "confirmed" as const,
+    };
+    for (const outcome of ["unknown", "rejected"] as const) {
+      expect(() =>
+        parseLaunchState({
+          ...makeState(),
+          phase: "verified",
+          transactions: {
+            mintInitialization: { ...confirmed, outcome },
+            metadataAttachment: confirmed,
+            initialMint: confirmed,
+            authorityRevocation: confirmed,
+          },
+        })
+      ).to.throw(
+        "Verified launch state requires a confirmed mintInitialization transaction"
+      );
+    }
+  });
+
   it("allows only the next forward phase", () => {
     const state = parseLaunchState(makeState());
     const configured = transitionLaunchState(state, "mint_initialized");

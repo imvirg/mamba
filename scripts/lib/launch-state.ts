@@ -195,6 +195,15 @@ function validatePhaseEvidence(
   if (phase === "supply_minted") return;
 
   requireConfirmedTransaction(
+    transactions.mintInitialization,
+    "mintInitialization"
+  );
+  requireConfirmedTransaction(
+    transactions.metadataAttachment,
+    "metadataAttachment"
+  );
+  requireConfirmedTransaction(transactions.initialMint, "initialMint");
+  requireConfirmedTransaction(
     transactions.authorityRevocation,
     "authorityRevocation"
   );
