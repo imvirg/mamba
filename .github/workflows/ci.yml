@@ -52,13 +52,34 @@ jobs:
       - name: Readiness dry-run smoke check
         run: |
           CLUSTER=localhost \
+          DECIMALS=9 \
+          SUPPLY=1000 \
+          TRANSFER_FEE_BPS=0 \
+          TRANSFER_FEE_MAX_BASE_UNITS=18446744073709551615 \
           WALLET=/tmp/mamba-ci-wallet-does-not-exist.json \
           npm run validate:launch
       - name: Strict readiness must reject missing governance
         run: |
           if CLUSTER=devnet \
             STRICT_LAUNCH=1 \
+            DECIMALS=9 \
+            SUPPLY=1000 \
+            TRANSFER_FEE_BPS=0 \
+            TRANSFER_FEE_MAX_BASE_UNITS=18446744073709551615 \
+            WALLET=/tmp/mamba-ci-wallet-does-not-exist.json \
+            npm run validate:launch:strict; then
+            echo "Strict readiness unexpectedly passed without governance."
+            exit 1
+          fi
+      - name: Strict readiness must reject missing wallet
+        run: |
+          if CLUSTER=devnet \
+            STRICT_LAUNCH=1 \
             AUTHORITY_MULTISIG=11111111111111111111111111111111 \
+            DECIMALS=9 \
+            SUPPLY=1000 \
+            TRANSFER_FEE_BPS=0 \
+            TRANSFER_FEE_MAX_BASE_UNITS=18446744073709551615 \
             WALLET=/tmp/mamba-ci-wallet-does-not-exist.json \
             npm run validate:launch:strict; then
             echo "Strict readiness unexpectedly passed without a wallet."
