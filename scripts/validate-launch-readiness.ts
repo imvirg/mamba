@@ -3,6 +3,7 @@ import * as os from "os";
 import * as path from "path";
 import { PublicKey } from "@solana/web3.js";
 import { MAMBA_MAINNET_AUTHORITY } from "../shared/mamba";
+import { parseLaunchConfig } from "./lib/launch-config";
 import {
   loadSquadsAuthorityConfig,
   validateSquadsAuthority,
@@ -10,7 +11,6 @@ import {
 import { Connection } from "@solana/web3.js";
 import { resolveClusterEndpoint } from "./lib/solana";
 
-const allowedClusters = ["localhost", "devnet", "testnet", "mainnet-beta"];
 const prodLikeClusters = ["mainnet-beta"];
 const strictMode =
   process.env.STRICT_LAUNCH === "1" || process.argv.includes("--strict");
@@ -24,25 +24,6 @@ function warn(message: string): void {
   console.warn(`WARN: ${message}`);
 }
 
-function requireNumericEnv(name: string, min: number, max: number): number {
-  const raw = process.env[name];
-  if (!raw) {
-    return 0;
-  }
-
-  const value = Number(raw);
-  if (
-    !Number.isFinite(value) ||
-    !Number.isInteger(value) ||
-    value < min ||
-    value > max
-  ) {
-    fail(`${name} must be an integer between ${min} and ${max}`);
-  }
-
-  return value;
-}
-
 function validatePublicKey(value: string | undefined, label: string): void {
   if (!value) return;
 
@@ -53,21 +34,24 @@ function validatePublicKey(value: string | undefined, label: string): void {
   }
 }
 
-const cluster = process.env.CLUSTER ?? "devnet";
 const authorityMultisig = process.env.AUTHORITY_MULTISIG;
 const walletPath =
   process.env.WALLET ?? path.join(os.homedir(), ".config/solana/id.json");
-const transferFeeBps = requireNumericEnv("TRANSFER_FEE_BPS", 0, 10000);
-const decimals = requireNumericEnv("DECIMALS", 0, 255);
-const supply = process.env.SUPPLY ?? "100000000";
+let launchConfig;
+try {
+  launchConfig = parseLaunchConfig(process.env);
+} catch (error) {
+  fail(error instanceof Error ? error.message : String(error));
+}
+const {
+  cluster,
+  supplyWholeTokens,
+  supplyBaseUnits,
+  transferFeeBps,
+  transferFeeMaxBaseUnits,
+} = launchConfig;
 
 console.log(`Validating launch readiness for cluster: ${cluster}`);
-
-if (!allowedClusters.includes(cluster)) {
-  fail(
-    `Unsupported cluster: ${cluster}. Allowed: ${allowedClusters.join(", ")}`
-  );
-}
 
 if (prodLikeClusters.includes(cluster) && !authorityMultisig) {
   fail(
@@ -97,20 +81,6 @@ if (authorityMultisig) {
       `AUTHORITY_MULTISIG is not the approved mainnet governance authority: ${MAMBA_MAINNET_AUTHORITY}`
     );
   }
-}
-
-try {
-  const supplyBaseUnits = BigInt(supply) * 10n ** BigInt(decimals);
-  const maxU64 = 18446744073709551615n;
-  if (BigInt(supply) <= 0n || supplyBaseUnits > maxU64) {
-    fail("SUPPLY must be a positive integer");
-  }
-} catch {
-  fail("SUPPLY must be a positive integer within the Token-2022 u64 limit");
-}
-
-if (transferFeeBps < 0 || transferFeeBps > 10000) {
-  fail("TRANSFER_FEE_BPS must be between 0 and 10000");
 }
 
 if (!fs.existsSync(walletPath)) {
@@ -149,7 +119,9 @@ async function finishValidation(): Promise<void> {
   console.log("Launch readiness checks passed.");
   console.log(`Wallet path: ${walletPath}`);
   console.log(`Transfer fee BPS: ${transferFeeBps}`);
-  console.log(`Supply: ${supply}`);
+  console.log(`Transfer fee max base units: ${transferFeeMaxBaseUnits}`);
+  console.log(`Supply: ${supplyWholeTokens}`);
+  console.log(`Supply base units: ${supplyBaseUnits}`);
 }
 
 finishValidation().catch((err: unknown) => {

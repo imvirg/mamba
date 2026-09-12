@@ -37,6 +37,10 @@ function runValidator(environment: Record<string, string | undefined>): {
 }
 
 describe("validate-launch-readiness", () => {
+  before(function () {
+    this.timeout(10000);
+  });
+
   it("rejects unsupported clusters", () => {
     const result = runValidator({
       CLUSTER: "invalid",
@@ -93,7 +97,20 @@ describe("validate-launch-readiness", () => {
     });
 
     expect(result.status).to.equal(1);
-    expect(result.output).to.contain("SUPPLY must be a positive integer");
+    expect(result.output).to.contain(
+      "SUPPLY must be a canonical unsigned integer"
+    );
+  });
+
+  it("rejects an invalid transfer fee maximum", () => {
+    const result = runValidator({
+      CLUSTER: "devnet",
+      TRANSFER_FEE_MAX_BASE_UNITS: "18446744073709551616",
+      AUTHORITY_MULTISIG: undefined,
+    });
+
+    expect(result.status).to.equal(1);
+    expect(result.output).to.contain("TRANSFER_FEE_MAX_BASE_UNITS");
   });
 
   it("rejects supply that exceeds the Token-2022 u64 limit", () => {
