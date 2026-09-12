@@ -47,3 +47,20 @@ jobs:
         run: npm run typecheck --workspace app
       - name: App lint
         run: npm run lint --workspace app
+      - name: App build
+        run: npm run build --workspace app
+      - name: Readiness dry-run smoke check
+        run: |
+          CLUSTER=localhost \
+          WALLET=/tmp/mamba-ci-wallet-does-not-exist.json \
+          npm run validate:launch
+      - name: Strict readiness must reject missing governance
+        run: |
+          if CLUSTER=devnet \
+            STRICT_LAUNCH=1 \
+            AUTHORITY_MULTISIG=11111111111111111111111111111111 \
+            WALLET=/tmp/mamba-ci-wallet-does-not-exist.json \
+            npm run validate:launch:strict; then
+            echo "Strict readiness unexpectedly passed without a wallet."
+            exit 1
+          fi

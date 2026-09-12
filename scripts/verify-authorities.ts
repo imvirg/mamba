@@ -13,7 +13,7 @@ import { resolveClusterEndpoint } from "../shared/mamba";
 import { requireEnv } from "./lib/solana";
 import { requireTransferFeeConfig } from "./lib/mint-validation";
 
-const CLUSTER = process.env.CLUSTER ?? "mainnet-beta"; // localhost | devnet | testnet | mainnet-beta
+const CLUSTER = requireEnv("CLUSTER");
 const MINT = new PublicKey(requireEnv("MINT"));
 const EXPECTED_MULTISIG = new PublicKey(requireEnv("EXPECTED_MULTISIG"));
 const EXPECTED_AUTHORITY = new PublicKey(requireEnv("EXPECTED_AUTHORITY"));
