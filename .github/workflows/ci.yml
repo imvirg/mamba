@@ -48,7 +48,7 @@ jobs:
       - name: App lint
         run: npm run lint --workspace app
       - name: App build
-        run: npm run build --workspace app
+        run: NEXT_PUBLIC_SOLANA_CLUSTER=devnet npm run build --workspace app
       - name: Readiness dry-run smoke check
         run: |
           CLUSTER=localhost \

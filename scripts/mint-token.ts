@@ -1,14 +1,20 @@
 // Mints additional supply of an existing SPL token to a destination wallet.
 import { Connection, PublicKey } from "@solana/web3.js";
-import { getOrCreateAssociatedTokenAccount, mintTo } from "@solana/spl-token";
+import {
+  getMint,
+  getOrCreateAssociatedTokenAccount,
+  mintTo,
+  TOKEN_2022_PROGRAM_ID,
+} from "@solana/spl-token";
 import {
   loadWalletKeypair,
   requireEnv,
   requireNonProductionCluster,
   resolveClusterEndpoint,
 } from "./lib/solana";
+import { assertToken2022MintAuthority } from "./lib/mint-token-policy";
 
-const CLUSTER = process.env.CLUSTER ?? "localhost";
+const CLUSTER = requireEnv("CLUSTER");
 const AMOUNT = BigInt(process.env.AMOUNT ?? "1000000000"); // in base units
 const DEST = process.env.DEST; // optional: base58 owner pubkey, defaults to payer
 
@@ -26,7 +32,17 @@ async function main() {
   if (!mintAccountInfo) {
     throw new Error(`Mint account not found: ${mint.toBase58()}`);
   }
-  const programId = mintAccountInfo.owner;
+  const mintState = await getMint(
+    connection,
+    mint,
+    "confirmed",
+    TOKEN_2022_PROGRAM_ID
+  );
+  assertToken2022MintAuthority(
+    mintAccountInfo.owner,
+    mintState.mintAuthority,
+    payer.publicKey
+  );
 
   const tokenAccount = await getOrCreateAssociatedTokenAccount(
     connection,
@@ -36,7 +52,7 @@ async function main() {
     false,
     "confirmed",
     undefined,
-    programId
+    TOKEN_2022_PROGRAM_ID
   );
   const sig = await mintTo(
     connection,
@@ -47,7 +63,7 @@ async function main() {
     AMOUNT,
     undefined,
     undefined,
-    programId
+    TOKEN_2022_PROGRAM_ID
   );
 
   console.log(

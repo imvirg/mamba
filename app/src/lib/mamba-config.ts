@@ -8,8 +8,19 @@ import {
 export { MAMBA_NAME, MAMBA_SYMBOL };
 export const MAMBA_LOGO_URL = "/mamba-snake.webp";
 
-export const SOLANA_CLUSTER =
-  process.env.NEXT_PUBLIC_SOLANA_CLUSTER ?? "devnet";
+const allowedClusters = ["devnet", "testnet", "mainnet-beta"] as const;
+const configuredCluster = process.env.NEXT_PUBLIC_SOLANA_CLUSTER;
+if (!configuredCluster && process.env.NODE_ENV !== "development") {
+  throw new Error("Set NEXT_PUBLIC_SOLANA_CLUSTER for production builds");
+}
+if (
+  configuredCluster !== undefined &&
+  !(allowedClusters as readonly string[]).includes(configuredCluster)
+) {
+  throw new Error(`Unsupported Solana cluster: ${configuredCluster}`);
+}
+
+export const SOLANA_CLUSTER = configuredCluster ?? "devnet";
 
 export const SOLANA_ENDPOINT = resolveClusterEndpoint(SOLANA_CLUSTER);
 
