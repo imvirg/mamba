@@ -13,9 +13,9 @@ import { MambaSendCard } from "@/components/mamba-send-card";
 const WalletMultiButton = dynamic(
   () =>
     import("@solana/wallet-adapter-react-ui").then(
-      (mod) => mod.WalletMultiButton
+      (mod) => mod.WalletMultiButton,
     ),
-  { ssr: false }
+  { ssr: false },
 );
 
 export default function Home() {
