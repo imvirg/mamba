@@ -7,12 +7,21 @@ const validatorPath = path.resolve(
   "scripts/validate-launch-readiness.ts"
 );
 const approvedMainnetAuthority = "HbMnEvNGdWmUr7Zdqj6aKMkzXUtUVUXviPDd3qQVtDoW";
+const explicitLaunchConfig = {
+  DECIMALS: "9",
+  SUPPLY: "1000",
+  TRANSFER_FEE_BPS: "0",
+  TRANSFER_FEE_MAX_BASE_UNITS: "18446744073709551615",
+};
 
 function runValidator(environment: Record<string, string | undefined>): {
   status: number | null;
   output: string;
 } {
-  const processEnvironment = { ...process.env };
+  const processEnvironment: Record<string, string | undefined> = {
+    ...process.env,
+    ...explicitLaunchConfig,
+  };
   for (const [name, value] of Object.entries(environment)) {
     if (value === undefined) {
       delete processEnvironment[name];
@@ -60,6 +69,16 @@ describe("validate-launch-readiness", () => {
 
     expect(result.status).to.equal(1);
     expect(result.output).to.contain("AUTHORITY_MULTISIG is required");
+  });
+
+  it("rejects missing launch economics", () => {
+    const result = runValidator({
+      CLUSTER: "devnet",
+      DECIMALS: undefined,
+    });
+
+    expect(result.status).to.equal(1);
+    expect(result.output).to.contain("DECIMALS is required");
   });
 
   it("requires expected governance configuration for a devnet authority", () => {

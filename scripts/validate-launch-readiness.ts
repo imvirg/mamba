@@ -39,7 +39,9 @@ const walletPath =
   process.env.WALLET ?? path.join(os.homedir(), ".config/solana/id.json");
 let launchConfig;
 try {
-  launchConfig = parseLaunchConfig(process.env);
+  launchConfig = parseLaunchConfig(process.env, {
+    requireExplicitValues: true,
+  });
 } catch (error) {
   fail(error instanceof Error ? error.message : String(error));
 }
