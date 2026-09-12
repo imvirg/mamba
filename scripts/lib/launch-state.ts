@@ -153,6 +153,53 @@ function parseTransaction(
   };
 }
 
+function requireTransactionCheckpoint(
+  transaction: LaunchTransaction | null,
+  field: string
+): void {
+  if (transaction === null || transaction.signature === null) {
+    throw new Error(`Launch state phase requires the ${field} checkpoint`);
+  }
+}
+
+function requireConfirmedTransaction(
+  transaction: LaunchTransaction | null,
+  field: string
+): void {
+  requireTransactionCheckpoint(transaction, field);
+  if (transaction === null || transaction.outcome !== "confirmed") {
+    throw new Error(
+      `Verified launch state requires a confirmed ${field} transaction`
+    );
+  }
+}
+
+function validatePhaseEvidence(
+  phase: LaunchPhase,
+  transactions: LaunchState["transactions"]
+): void {
+  if (phase === "prepared" || phase === "blocked") return;
+  requireTransactionCheckpoint(
+    transactions.mintInitialization,
+    "mintInitialization"
+  );
+  if (phase === "mint_initialized") return;
+
+  requireTransactionCheckpoint(
+    transactions.metadataAttachment,
+    "metadataAttachment"
+  );
+  if (phase === "metadata_attached") return;
+
+  requireTransactionCheckpoint(transactions.initialMint, "initialMint");
+  if (phase === "supply_minted") return;
+
+  requireConfirmedTransaction(
+    transactions.authorityRevocation,
+    "authorityRevocation"
+  );
+}
+
 export function parseLaunchState(value: unknown): LaunchState {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("Launch state must be an object");
@@ -242,6 +289,26 @@ export function parseLaunchState(value: unknown): LaunchState {
     );
   }
 
+  const parsedTransactions = {
+    mintInitialization: parseTransaction(
+      transactionInput.mintInitialization,
+      "transactions.mintInitialization"
+    ),
+    metadataAttachment: parseTransaction(
+      transactionInput.metadataAttachment,
+      "transactions.metadataAttachment"
+    ),
+    initialMint: parseTransaction(
+      transactionInput.initialMint,
+      "transactions.initialMint"
+    ),
+    authorityRevocation: parseTransaction(
+      transactionInput.authorityRevocation,
+      "transactions.authorityRevocation"
+    ),
+  };
+  validatePhaseEvidence(input.phase as LaunchPhase, parsedTransactions);
+
   return {
     schemaVersion: 1,
     launchId: requireString(input.launchId, "launchId"),
@@ -268,24 +335,7 @@ export function parseLaunchState(value: unknown): LaunchState {
       symbol: requireString(metadataInput.symbol, "metadata.symbol"),
       uri: requireString(metadataInput.uri, "metadata.uri"),
     },
-    transactions: {
-      mintInitialization: parseTransaction(
-        transactionInput.mintInitialization,
-        "transactions.mintInitialization"
-      ),
-      metadataAttachment: parseTransaction(
-        transactionInput.metadataAttachment,
-        "transactions.metadataAttachment"
-      ),
-      initialMint: parseTransaction(
-        transactionInput.initialMint,
-        "transactions.initialMint"
-      ),
-      authorityRevocation: parseTransaction(
-        transactionInput.authorityRevocation,
-        "transactions.authorityRevocation"
-      ),
-    },
+    transactions: parsedTransactions,
     createdAt: requireString(input.createdAt, "createdAt"),
     updatedAt: requireString(input.updatedAt, "updatedAt"),
   };

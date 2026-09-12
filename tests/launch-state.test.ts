@@ -76,6 +76,48 @@ describe("launch state", () => {
     ).to.throw("supplyBaseUnits does not match supplyWholeTokens");
   });
 
+  it("requires transaction checkpoints for advanced phases", () => {
+    expect(() =>
+      parseLaunchState(makeState({ phase: "mint_initialized" }))
+    ).to.throw("phase requires the mintInitialization checkpoint");
+
+    const missingSignature = {
+      ...makeState({ phase: "mint_initialized" }),
+      transactions: {
+        ...makeState().transactions,
+        mintInitialization: {
+          signature: null,
+          submittedAt: "2026-09-03T00:00:00.000Z",
+          outcome: "unknown" as const,
+        },
+      },
+    };
+    expect(() => parseLaunchState(missingSignature)).to.throw(
+      "phase requires the mintInitialization checkpoint"
+    );
+  });
+
+  it("requires every confirmed checkpoint before verification", () => {
+    const confirmed = {
+      signature: "signature",
+      submittedAt: "2026-09-03T00:00:00.000Z",
+      outcome: "confirmed" as const,
+    };
+    const state = makeState({
+      phase: "verified",
+      transactions: {
+        mintInitialization: confirmed,
+        metadataAttachment: confirmed,
+        initialMint: confirmed,
+        authorityRevocation: null,
+      },
+    });
+
+    expect(() => parseLaunchState(state)).to.throw(
+      "phase requires the authorityRevocation checkpoint"
+    );
+  });
+
   it("allows only the next forward phase", () => {
     const state = parseLaunchState(makeState());
     const configured = transitionLaunchState(state, "mint_initialized");
@@ -87,7 +129,22 @@ describe("launch state", () => {
   });
 
   it("rejects backward transitions and changes after blocked", () => {
-    const state = parseLaunchState(makeState({ phase: "metadata_attached" }));
+    const confirmed = {
+      signature: "signature",
+      submittedAt: "2026-09-03T00:00:00.000Z",
+      outcome: "confirmed" as const,
+    };
+    const state = parseLaunchState(
+      makeState({
+        phase: "metadata_attached",
+        transactions: {
+          mintInitialization: confirmed,
+          metadataAttachment: confirmed,
+          initialMint: null,
+          authorityRevocation: null,
+        },
+      })
+    );
     const blocked = transitionLaunchState(state, "blocked");
 
     expect(() => transitionLaunchState(state, "prepared")).to.throw(

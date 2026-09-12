@@ -83,6 +83,14 @@ describe("launch state store", () => {
     const updated = updateLaunchState(filePath, (state) => ({
       ...state,
       phase: "mint_initialized",
+      transactions: {
+        ...state.transactions,
+        mintInitialization: {
+          signature: "signature",
+          submittedAt: "2026-09-03T00:00:01.000Z",
+          outcome: "confirmed",
+        },
+      },
     }));
 
     expect(updated.phase).to.equal("mint_initialized");
@@ -122,6 +130,14 @@ describe("launch state store", () => {
         ...state,
         phase: "mint_initialized",
         authorityMultisig: memberTwo,
+        transactions: {
+          ...state.transactions,
+          mintInitialization: {
+            signature: "signature",
+            submittedAt: "2026-09-03T00:00:01.000Z",
+            outcome: "confirmed",
+          },
+        },
       }))
     ).to.throw("Launch identity cannot change");
   });
