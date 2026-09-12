@@ -78,3 +78,22 @@ A change is only acceptable if it is:
 - maintainable and reviewable
 
 If a change weakens the authority model, removes protection, or introduces a silent migration risk without an explicit and justified reason, reject it.
+
+## Required agent team
+
+Before substantive project work, deploy the eight-role review team in parallel and use the reports to route the work:
+
+1. `mamba-security-reviewer` - authority, wallet, cluster, and production-safety review
+2. `solana-rust-expert` - Solana, Anchor, account, CPI, and on-chain behavior review
+3. `typescript-web-expert` - TypeScript, Node, Next.js, tests, and build review
+4. `Explore` - independent repository and dependency-free context exploration
+5. `mamba-project-chronicle` - evidence-based project timeline and validation history
+6. `mamba-project-improvement` - lessons learned, risks, and prioritized future improvements
+7. `legal-researcher` - securities, regulatory, contract, and general legal risk review
+8. `legal-ip-researcher` - copyright, trademark, licensing, branding, and asset review
+
+The team must be read-only unless the user explicitly assigns implementation work. Agents must not fetch, install, copy, or introduce untrusted third-party code. Each report must identify evidence, uncertainty, and recommended next checks. The primary agent remains responsible for reconciling conflicting reports and running fresh validation.
+
+Legal agents are mandatory for work involving token classification, securities or regulatory claims, token economics, public marketing claims, names, logos, images, AI-generated assets, metadata, licenses, attribution, contracts, or external content. Their reports are risk analysis only and do not replace qualified legal counsel.
+
+This eight-agent pass is required for implementation, review, launch, deployment, security, architecture, and release-planning requests. It may be skipped for trivial conversation, direct file lookup, or emergency safety blocking, with the omission stated explicitly.
