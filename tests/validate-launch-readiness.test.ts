@@ -1,6 +1,8 @@
 import { expect } from "chai";
 import { spawnSync } from "child_process";
+import * as fs from "fs";
 import * as path from "path";
+import { Keypair } from "@solana/web3.js";
 
 const validatorPath = path.resolve(
   process.cwd(),
@@ -108,17 +110,32 @@ describe("validate-launch-readiness", () => {
   });
 
   it("requires live governance configuration for the approved mainnet authority", () => {
-    const result = runValidator({
-      CLUSTER: "mainnet-beta",
-      AUTHORITY_MULTISIG: approvedMainnetAuthority,
-      WALLET: "/dev/null",
-      EXPECTED_MULTISIG: undefined,
-      EXPECTED_THRESHOLD: undefined,
-      EXPECTED_MEMBERS: undefined,
+    const walletPath = path.join(
+      process.cwd(),
+      "tests",
+      `.mamba-governance-wallet-${process.pid}.json`
+    );
+    const wallet = Keypair.generate();
+    fs.writeFileSync(walletPath, JSON.stringify(Array.from(wallet.secretKey)), {
+      mode: 0o600,
     });
+    try {
+      const result = runValidator({
+        CLUSTER: "mainnet-beta",
+        AUTHORITY_MULTISIG: approvedMainnetAuthority,
+        WALLET: walletPath,
+        EXPECTED_MULTISIG: undefined,
+        EXPECTED_THRESHOLD: undefined,
+        EXPECTED_MEMBERS: undefined,
+      });
 
-    expect(result.status).to.equal(1);
-    expect(result.output).to.contain("Set EXPECTED_THRESHOLD=<value> env var");
+      expect(result.status).to.equal(1);
+      expect(result.output).to.contain(
+        "Set EXPECTED_THRESHOLD=<value> env var"
+      );
+    } finally {
+      fs.rmSync(walletPath, { force: true });
+    }
   });
 
   it("rejects malformed supply", () => {
@@ -167,6 +184,27 @@ describe("validate-launch-readiness", () => {
 
     expect(result.status).to.equal(1);
     expect(result.output).to.contain("Wallet file not found");
+  });
+
+  it("rejects an existing wallet with broad permissions", () => {
+    const walletPath = path.join(
+      process.cwd(),
+      "tests",
+      `.mamba-invalid-wallet-${process.pid}.json`
+    );
+    fs.writeFileSync(walletPath, "[]", { mode: 0o644 });
+    try {
+      const result = runValidator({
+        CLUSTER: "devnet",
+        AUTHORITY_MULTISIG: "11111111111111111111111111111111",
+        WALLET: walletPath,
+      });
+
+      expect(result.status).to.equal(1);
+      expect(result.output).to.contain("Wallet permissions are too broad");
+    } finally {
+      fs.rmSync(walletPath, { force: true });
+    }
   });
 
   it("allows a localhost dry run with a missing wallet", () => {

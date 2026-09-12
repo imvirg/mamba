@@ -9,7 +9,7 @@ import {
   validateSquadsAuthority,
 } from "./lib/authority";
 import { Connection } from "@solana/web3.js";
-import { resolveClusterEndpoint } from "./lib/solana";
+import { resolveClusterEndpoint, validateWalletFile } from "./lib/solana";
 
 const prodLikeClusters = ["mainnet-beta"];
 const strictMode =
@@ -90,6 +90,12 @@ if (!fs.existsSync(walletPath)) {
     fail(`Wallet file not found at ${walletPath}`);
   }
   warn(`Wallet file not found at ${walletPath}.`);
+} else {
+  try {
+    validateWalletFile(walletPath);
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
+  }
 }
 
 if (!authorityMultisig && cluster === "devnet") {

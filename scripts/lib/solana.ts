@@ -9,7 +9,7 @@ export { resolveClusterEndpoint };
 
 const DEFAULT_WALLET_PATH = path.join(os.homedir(), ".config/solana/id.json");
 
-function assertWalletPath(filePath: string): void {
+export function validateWalletFile(filePath: string): void {
   if (!path.isAbsolute(filePath)) {
     throw new Error("Wallet path must be absolute");
   }
@@ -27,7 +27,7 @@ function assertWalletPath(filePath: string): void {
 
 function readWalletSecret(): Uint8Array {
   const keyPath = process.env.WALLET ?? DEFAULT_WALLET_PATH;
-  assertWalletPath(keyPath);
+  validateWalletFile(keyPath);
   let value: unknown;
   try {
     value = JSON.parse(fs.readFileSync(keyPath, "utf-8"));
