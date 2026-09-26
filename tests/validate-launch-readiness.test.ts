@@ -73,6 +73,41 @@ describe("validate-launch-readiness", () => {
     expect(result.output).to.contain("AUTHORITY_MULTISIG is required");
   });
 
+  it("rejects missing authority on devnet by default", () => {
+    const result = runValidator({
+      CLUSTER: "devnet",
+      AUTHORITY_MULTISIG: undefined,
+    });
+
+    expect(result.status).to.equal(1);
+    expect(result.output).to.contain(
+      "AUTHORITY_MULTISIG is required for every non-local cluster"
+    );
+  });
+
+  it("rejects missing authority on testnet by default", () => {
+    const result = runValidator({
+      CLUSTER: "testnet",
+      AUTHORITY_MULTISIG: undefined,
+    });
+
+    expect(result.status).to.equal(1);
+    expect(result.output).to.contain(
+      "AUTHORITY_MULTISIG is required for every non-local cluster"
+    );
+  });
+
+  it("rejects a missing wallet on devnet by default", () => {
+    const result = runValidator({
+      CLUSTER: "devnet",
+      AUTHORITY_MULTISIG: "11111111111111111111111111111111",
+      WALLET: "/tmp/mamba-test-wallet-does-not-exist.json",
+    });
+
+    expect(result.status).to.equal(1);
+    expect(result.output).to.contain("Wallet file not found");
+  });
+
   it("rejects missing launch economics", () => {
     const result = runValidator({
       CLUSTER: "devnet",

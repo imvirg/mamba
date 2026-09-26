@@ -58,6 +58,18 @@ jobs:
           TRANSFER_FEE_MAX_BASE_UNITS=18446744073709551615 \
           WALLET=/tmp/mamba-ci-wallet-does-not-exist.json \
           npm run validate:launch
+      - name: Default readiness must reject missing governance
+        run: |
+          if CLUSTER=devnet \
+            DECIMALS=9 \
+            SUPPLY=1000 \
+            TRANSFER_FEE_BPS=0 \
+            TRANSFER_FEE_MAX_BASE_UNITS=18446744073709551615 \
+            WALLET=/tmp/mamba-ci-wallet-does-not-exist.json \
+            npm run validate:launch; then
+            echo "Default readiness unexpectedly passed without governance."
+            exit 1
+          fi
       - name: Strict readiness must reject missing governance
         run: |
           if CLUSTER=devnet \

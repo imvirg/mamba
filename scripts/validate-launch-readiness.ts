@@ -11,7 +11,7 @@ import {
 import { Connection } from "@solana/web3.js";
 import { resolveClusterEndpoint, validateWalletFile } from "./lib/solana";
 
-const prodLikeClusters = ["mainnet-beta"];
+const governedClusters = ["devnet", "testnet", "mainnet-beta"];
 const strictMode =
   process.env.STRICT_LAUNCH === "1" || process.argv.includes("--strict");
 
@@ -55,10 +55,8 @@ const {
 
 console.log(`Validating launch readiness for cluster: ${cluster}`);
 
-if (prodLikeClusters.includes(cluster) && !authorityMultisig) {
-  fail(
-    "AUTHORITY_MULTISIG is required for mainnet-beta or production-like clusters."
-  );
+if (governedClusters.includes(cluster) && !authorityMultisig) {
+  fail("AUTHORITY_MULTISIG is required for every non-local cluster.");
 }
 
 if (strictMode && !authorityMultisig) {
@@ -67,16 +65,10 @@ if (strictMode && !authorityMultisig) {
   );
 }
 
-if (!authorityMultisig && cluster !== "localhost" && cluster !== "devnet") {
-  fail(
-    "Missing AUTHORITY_MULTISIG for a non-local cluster. Do not continue without explicit governance control."
-  );
-}
-
 if (authorityMultisig) {
   validatePublicKey(authorityMultisig, "AUTHORITY_MULTISIG");
   if (
-    prodLikeClusters.includes(cluster) &&
+    cluster === "mainnet-beta" &&
     authorityMultisig !== MAMBA_MAINNET_AUTHORITY
   ) {
     fail(
@@ -86,7 +78,7 @@ if (authorityMultisig) {
 }
 
 if (!fs.existsSync(walletPath)) {
-  if (prodLikeClusters.includes(cluster) || strictMode) {
+  if (cluster !== "localhost" || strictMode) {
     fail(`Wallet file not found at ${walletPath}`);
   }
   warn(`Wallet file not found at ${walletPath}.`);
@@ -98,28 +90,15 @@ if (!fs.existsSync(walletPath)) {
   }
 }
 
-if (!authorityMultisig && cluster === "devnet") {
-  if (strictMode) {
-    fail(
-      "STRICT_LAUNCH is enabled; AUTHORITY_MULTISIG is required even on devnet."
-    );
-  }
-  warn(
-    "AUTHORITY_MULTISIG is not set. This is a devnet convenience fallback only; do not treat it as launch-safe."
-  );
-}
-
 async function finishValidation(): Promise<void> {
   if (authorityMultisig && cluster !== "localhost") {
     const authority = new PublicKey(authorityMultisig);
     const config = loadSquadsAuthorityConfig(authority);
-    if (cluster === "mainnet-beta") {
-      const connection = new Connection(
-        resolveClusterEndpoint(cluster),
-        "confirmed"
-      );
-      await validateSquadsAuthority(connection, config);
-    }
+    const connection = new Connection(
+      resolveClusterEndpoint(cluster),
+      "confirmed"
+    );
+    await validateSquadsAuthority(connection, config);
   }
 
   if (authorityMultisig && cluster === "devnet") {
