@@ -3,11 +3,18 @@ import { spawnSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { PublicKey } from "@solana/web3.js";
+import { getVaultPda } from "@sqds/multisig";
 import { createLaunchState } from "../scripts/lib/launch-state-store";
 import { LaunchState } from "../scripts/lib/launch-state";
 
 const statusPath = path.resolve(process.cwd(), "scripts/launch-status.ts");
 const statusDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "mamba-status-"));
+const expectedMultisig = "SysvarRent111111111111111111111111111111111";
+const [expectedAuthorityVault] = getVaultPda({
+  multisigPda: new PublicKey(expectedMultisig),
+  index: 0,
+});
 
 function makeState(phase: LaunchState["phase"]): LaunchState {
   return {
@@ -18,8 +25,8 @@ function makeState(phase: LaunchState["phase"]): LaunchState {
     mintPublicKey: "11111111111111111111111111111111",
     mintSignerKeyRef: "/secure/mamba/mint.json",
     payerPublicKey: "SysvarRent111111111111111111111111111111111",
-    authorityMultisig: "11111111111111111111111111111111",
-    expectedMultisig: "SysvarRent111111111111111111111111111111111",
+    authorityMultisig: expectedAuthorityVault.toBase58(),
+    expectedMultisig,
     expectedThreshold: 2,
     expectedMembers: [
       "11111111111111111111111111111111",
@@ -63,6 +70,8 @@ describe("launch-status", () => {
     expect(result.status).to.equal(2);
     expect(output.status).to.equal("incomplete");
     expect(output.decision).to.equal("BLOCK");
+    expect(output.authorityVault).to.equal(expectedAuthorityVault.toBase58());
+    expect(output.authoritiesMatch).to.equal(true);
     expect(output).not.to.have.property("mintSignerKeyRef");
   });
 
@@ -106,7 +115,7 @@ describe("launch-status", () => {
 
     const result = runStatus(filePath);
     const output = JSON.parse(result.stdout);
-    expect(result.status).to.equal(0);
+    expect(result.status).to.equal(2);
     expect(output.status).to.equal("complete_recorded");
     expect(output.decision).to.equal("BLOCK");
   });

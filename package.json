@@ -14,6 +14,7 @@
     "create-coin": "ts-node scripts/create-coin.ts",
     "verify-authorities": "ts-node scripts/verify-authorities.ts",
     "launch-status": "ts-node scripts/launch-status.ts",
+    "reconcile-launch": "ts-node scripts/reconcile-launch.ts",
     "validate:launch": "ts-node scripts/validate-launch-readiness.ts",
     "validate:launch:strict": "STRICT_LAUNCH=1 ts-node scripts/validate-launch-readiness.ts",
     "test": "ts-mocha \"tests/**/*.test.ts\""

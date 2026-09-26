@@ -1,3 +1,5 @@
+import { PublicKey } from "@solana/web3.js";
+import { getVaultPda } from "@sqds/multisig";
 import { loadLaunchState } from "./lib/launch-state-store";
 import { LaunchState } from "./lib/launch-state";
 
@@ -29,7 +31,15 @@ function getStatus(state: LaunchState): {
   ) {
     return { status: "incomplete", decision: "BLOCK", exitCode: 2 };
   }
-  return { status: "complete_recorded", decision: "BLOCK", exitCode: 0 };
+  return { status: "complete_recorded", decision: "BLOCK", exitCode: 2 };
+}
+
+function authoritiesMatch(state: LaunchState): boolean {
+  const [expectedAuthorityVault] = getVaultPda({
+    multisigPda: new PublicKey(state.expectedMultisig),
+    index: 0,
+  });
+  return expectedAuthorityVault.toBase58() === state.authorityMultisig;
 }
 
 try {
@@ -45,8 +55,9 @@ try {
       status: result.status,
       decision: result.decision,
       authorityMultisig: state.authorityMultisig,
+      authorityVault: state.authorityMultisig,
       expectedMultisig: state.expectedMultisig,
-      authoritiesMatch: state.authorityMultisig === state.expectedMultisig,
+      authoritiesMatch: authoritiesMatch(state),
       transactions: state.transactions,
       note: "Local state only; chain verification is required before launch decisions.",
     })

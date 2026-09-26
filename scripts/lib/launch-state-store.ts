@@ -57,6 +57,15 @@ function validateState(state: LaunchState): LaunchState {
   return parsed;
 }
 
+function syncDirectory(directoryPath: string): void {
+  const descriptor = fs.openSync(directoryPath, "r");
+  try {
+    fs.fsyncSync(descriptor);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
 function immutableStateFingerprint(state: LaunchState): string {
   const {
     phase: _phase,
@@ -83,6 +92,7 @@ function writeAtomically(filePath: string, state: LaunchState): void {
     descriptor = undefined;
     fs.renameSync(tempPath, filePath);
     fs.chmodSync(filePath, 0o600);
+    syncDirectory(directoryPath);
   } finally {
     if (descriptor !== undefined) fs.closeSync(descriptor);
     fs.rmSync(tempDirectory, { recursive: true, force: true });
@@ -151,5 +161,21 @@ export function updateLaunchState(
     if (lockAcquired) {
       fs.rmSync(lockPath, { recursive: true, force: false });
     }
+  }
+}
+
+export async function withLaunchStateLock<T>(
+  filePath: string,
+  operation: () => Promise<T>
+): Promise<T> {
+  if (!path.isAbsolute(filePath)) {
+    throw new Error("Launch state path must be absolute");
+  }
+  const lockPath = `${filePath}.lock`;
+  fs.mkdirSync(lockPath, { mode: 0o700 });
+  try {
+    return await operation();
+  } finally {
+    fs.rmSync(lockPath, { recursive: true, force: false });
   }
 }

@@ -8,13 +8,13 @@
 // (fixed supply forever), freeze authority is never set (no account can ever
 // be frozen), and the tax/burn authorities go to AUTHORITY_MULTISIG instead
 // of this hot wallet — see the "Still open" note in the mamba/ project memory.
+import * as fs from "fs";
 import {
   Connection,
   Keypair,
   PublicKey,
   SystemProgram,
   Transaction,
-  sendAndConfirmTransaction,
 } from "@solana/web3.js";
 import {
   TOKEN_2022_PROGRAM_ID,
@@ -24,10 +24,10 @@ import {
   createInitializeTransferFeeConfigInstruction,
   createInitializeMintInstruction,
   createSetAuthorityInstruction,
+  createMintToInstruction,
   getOrCreateAssociatedTokenAccount,
   getMint,
   getTransferFeeConfig,
-  mintTo,
 } from "@solana/spl-token";
 import { createUmi } from "@metaplex-foundation/umi-bundle-defaults";
 import {
@@ -52,7 +52,13 @@ import {
   assertFinalMintState,
   assertPreMintState,
 } from "./lib/mint-validation";
-import { createLaunchState, updateLaunchState } from "./lib/launch-state-store";
+import {
+  createLaunchState,
+  loadLaunchState,
+  updateLaunchState,
+  withLaunchStateLock,
+} from "./lib/launch-state-store";
+import { LaunchPhase } from "./lib/launch-state";
 import { createMintSigner, loadMintSigner } from "./lib/mint-signer";
 import { parseLaunchConfig } from "./lib/launch-config";
 import { MAMBA_MAINNET_AUTHORITY } from "../shared/mamba";
@@ -69,7 +75,7 @@ const URI =
 // Transfer fee (tax), in basis points. Starts inactive; raise later once MAMBA
 // has real volume by calling createSetTransferFeeInstruction as the fee authority.
 
-async function main() {
+async function runLaunch() {
   const launchConfig = parseLaunchConfig(process.env, {
     requireExplicitValues: true,
   });
@@ -84,6 +90,22 @@ async function main() {
   const launchId = requireEnv("LAUNCH_ID");
   const launchStatePath = requireEnv("LAUNCH_STATE");
   const mintSignerPath = requireEnv("MINT_SIGNER_PATH");
+  const resumeRequested = process.env.RESUME_LAUNCH === "1";
+  let existingState: ReturnType<typeof loadLaunchState> | undefined;
+  if (fs.existsSync(launchStatePath)) {
+    existingState = loadLaunchState(launchStatePath);
+    if (!resumeRequested) {
+      throw new Error(
+        `Launch state already exists for ${existingState.launchId} at ${launchStatePath} ` +
+          `(mint ${existingState.mintPublicKey}, phase ${existingState.phase}). ` +
+          "Resume or reconcile this launch before starting another one."
+      );
+    }
+  } else if (resumeRequested) {
+    throw new Error(
+      `Cannot resume launch because state does not exist at ${launchStatePath}`
+    );
+  }
   const authorityMultisig = new PublicKey(requireEnv("AUTHORITY_MULTISIG"));
   if (
     cluster === "mainnet-beta" &&
@@ -97,39 +119,112 @@ async function main() {
   const connection = new Connection(endpoint, "confirmed");
   const payer = loadWalletKeypair();
   const authorityConfig = loadSquadsAuthorityConfig(authorityMultisig);
-  if (cluster === "mainnet-beta") {
+  if (cluster !== "localhost") {
     await validateSquadsAuthority(connection, authorityConfig);
   }
-  const mintKeypair = Keypair.generate();
+  let mintKeypair: Keypair;
+  let currentPhase: LaunchPhase;
+  if (existingState) {
+    const expectedMembers = authorityConfig.members
+      .map((member) => member.toBase58())
+      .sort();
+    const expectedConfig = {
+      cluster,
+      authorityMultisig: authorityMultisig.toBase58(),
+      expectedMultisig: authorityConfig.multisig.toBase58(),
+      expectedThreshold: authorityConfig.threshold,
+      expectedMembers,
+      decimals,
+      supplyWholeTokens: supplyWholeTokens.toString(),
+      supplyBaseUnits: supplyBaseUnits.toString(),
+      metadata: { name: NAME, symbol: SYMBOL, uri: URI },
+    };
+    if (
+      existingState.launchId !== launchId ||
+      existingState.cluster !== expectedConfig.cluster ||
+      existingState.authorityMultisig !== expectedConfig.authorityMultisig ||
+      existingState.expectedMultisig !== expectedConfig.expectedMultisig ||
+      existingState.expectedThreshold !== expectedConfig.expectedThreshold ||
+      JSON.stringify([...existingState.expectedMembers].sort()) !==
+        JSON.stringify(expectedConfig.expectedMembers) ||
+      existingState.decimals !== expectedConfig.decimals ||
+      existingState.supplyWholeTokens !== expectedConfig.supplyWholeTokens ||
+      existingState.supplyBaseUnits !== expectedConfig.supplyBaseUnits ||
+      JSON.stringify(existingState.metadata) !==
+        JSON.stringify(expectedConfig.metadata) ||
+      existingState.mintSignerKeyRef !== mintSignerPath ||
+      existingState.payerPublicKey !== payer.publicKey.toBase58()
+    ) {
+      throw new Error(
+        "Resume configuration does not match the persisted launch identity"
+      );
+    }
+    if (
+      existingState.phase === "blocked" ||
+      existingState.phase === "verified"
+    ) {
+      throw new Error(
+        `Cannot resume launch from terminal phase ${existingState.phase}`
+      );
+    }
+    const unresolvedTransaction = Object.values(
+      existingState.transactions
+    ).find((transaction) => transaction?.outcome === "unknown");
+    if (unresolvedTransaction) {
+      throw new Error(
+        "Cannot resume while a transaction outcome is unknown; run reconcile-launch first"
+      );
+    }
+    const rejectedTransaction = Object.values(existingState.transactions).find(
+      (transaction) => transaction?.outcome === "rejected"
+    );
+    if (rejectedTransaction) {
+      throw new Error(
+        "Cannot resume after a rejected transaction; inspect the launch state before retrying"
+      );
+    }
+    mintKeypair = loadMintSigner(
+      mintSignerPath,
+      new PublicKey(existingState.mintPublicKey)
+    );
+    currentPhase = existingState.phase;
+  } else {
+    mintKeypair = Keypair.generate();
+    currentPhase = "prepared";
+  }
   const baseUnits = supplyBaseUnits;
 
-  const preparedAt = new Date().toISOString();
-  createLaunchState(launchStatePath, {
-    schemaVersion: 1,
-    launchId,
-    phase: "prepared",
-    cluster: cluster as "localhost" | "devnet" | "testnet" | "mainnet-beta",
-    mintPublicKey: mintKeypair.publicKey.toBase58(),
-    mintSignerKeyRef: mintSignerPath,
-    payerPublicKey: payer.publicKey.toBase58(),
-    authorityMultisig: authorityMultisig.toBase58(),
-    expectedMultisig: authorityConfig.multisig.toBase58(),
-    expectedThreshold: authorityConfig.threshold,
-    expectedMembers: authorityConfig.members.map((member) => member.toBase58()),
-    decimals,
-    supplyWholeTokens: supplyWholeTokens.toString(),
-    supplyBaseUnits: baseUnits.toString(),
-    metadata: { name: NAME, symbol: SYMBOL, uri: URI },
-    transactions: {
-      mintInitialization: null,
-      metadataAttachment: null,
-      initialMint: null,
-      authorityRevocation: null,
-    },
-    createdAt: preparedAt,
-    updatedAt: preparedAt,
-  });
-  createMintSigner(mintSignerPath, mintKeypair);
+  if (!existingState) {
+    const preparedAt = new Date().toISOString();
+    createLaunchState(launchStatePath, {
+      schemaVersion: 1,
+      launchId,
+      phase: "prepared",
+      cluster: cluster as "localhost" | "devnet" | "testnet" | "mainnet-beta",
+      mintPublicKey: mintKeypair.publicKey.toBase58(),
+      mintSignerKeyRef: mintSignerPath,
+      payerPublicKey: payer.publicKey.toBase58(),
+      authorityMultisig: authorityMultisig.toBase58(),
+      expectedMultisig: authorityConfig.multisig.toBase58(),
+      expectedThreshold: authorityConfig.threshold,
+      expectedMembers: authorityConfig.members.map((member) =>
+        member.toBase58()
+      ),
+      decimals,
+      supplyWholeTokens: supplyWholeTokens.toString(),
+      supplyBaseUnits: baseUnits.toString(),
+      metadata: { name: NAME, symbol: SYMBOL, uri: URI },
+      transactions: {
+        mintInitialization: null,
+        metadataAttachment: null,
+        initialMint: null,
+        authorityRevocation: null,
+      },
+      createdAt: preparedAt,
+      updatedAt: preparedAt,
+    });
+    createMintSigner(mintSignerPath, mintKeypair);
+  }
 
   // Authority story (see mamba/ project memory): mint authority is revoked
   // after the initial mint (fixed supply forever), freeze authority is never
@@ -145,224 +240,424 @@ async function main() {
   // Phase 1: create the mint account with the TransferFeeConfig extension.
   // Metaplex's create instruction (below) can't allocate extension space, so
   // the mint has to be created and initialized directly against Token-2022 first.
-  const mintLen = getMintLen([ExtensionType.TransferFeeConfig]);
-  const lamports = await connection.getMinimumBalanceForRentExemption(mintLen);
+  if (currentPhase === "prepared") {
+    const mintLen = getMintLen([ExtensionType.TransferFeeConfig]);
+    const lamports = await connection.getMinimumBalanceForRentExemption(
+      mintLen
+    );
 
-  const createMintTx = new Transaction().add(
-    SystemProgram.createAccount({
-      fromPubkey: payer.publicKey,
-      newAccountPubkey: mintKeypair.publicKey,
-      space: mintLen,
-      lamports,
-      programId: TOKEN_2022_PROGRAM_ID,
-    }),
-    createInitializeTransferFeeConfigInstruction(
-      mintKeypair.publicKey,
-      authorityMultisig, // transferFeeConfigAuthority: can raise/lower the tax later
-      authorityMultisig, // withdrawWithheldAuthority: can sweep withheld fees (for burn) later
-      transferFeeBps,
-      transferFeeMaxBaseUnits,
-      TOKEN_2022_PROGRAM_ID
-    ),
-    createInitializeMintInstruction(
-      mintKeypair.publicKey,
-      decimals,
-      payer.publicKey, // mint authority — revoked below once the initial supply is minted
-      null, // freeze authority: never set, so no account can ever be frozen
-      TOKEN_2022_PROGRAM_ID
-    )
-  );
-  const mintSubmittedAt = new Date().toISOString();
-  const mintSig = await sendAndConfirmTransaction(connection, createMintTx, [
-    payer,
-    mintKeypair,
-  ]);
-  updateLaunchState(launchStatePath, (state) => ({
-    ...state,
-    phase: "mint_initialized",
-    transactions: {
-      ...state.transactions,
-      mintInitialization: {
-        signature: mintSig,
-        submittedAt: mintSubmittedAt,
-        outcome: "confirmed",
+    const createMintTx = new Transaction().add(
+      SystemProgram.createAccount({
+        fromPubkey: payer.publicKey,
+        newAccountPubkey: mintKeypair.publicKey,
+        space: mintLen,
+        lamports,
+        programId: TOKEN_2022_PROGRAM_ID,
+      }),
+      createInitializeTransferFeeConfigInstruction(
+        mintKeypair.publicKey,
+        authorityMultisig, // transferFeeConfigAuthority: can raise/lower the tax later
+        authorityMultisig, // withdrawWithheldAuthority: can sweep withheld fees (for burn) later
+        transferFeeBps,
+        transferFeeMaxBaseUnits,
+        TOKEN_2022_PROGRAM_ID
+      ),
+      createInitializeMintInstruction(
+        mintKeypair.publicKey,
+        decimals,
+        payer.publicKey, // mint authority — revoked below once the initial supply is minted
+        null, // freeze authority: never set, so no account can ever be frozen
+        TOKEN_2022_PROGRAM_ID
+      )
+    );
+    const mintSubmittedAt = new Date().toISOString();
+    const mintSig = await connection.sendTransaction(createMintTx, [
+      payer,
+      mintKeypair,
+    ]);
+    updateLaunchState(launchStatePath, (state) => ({
+      ...state,
+      phase: "mint_initialized",
+      transactions: {
+        ...state.transactions,
+        mintInitialization: {
+          signature: mintSig,
+          submittedAt: mintSubmittedAt,
+          outcome: "unknown",
+        },
       },
-    },
-  }));
-  console.log(`Mint initialized. Tx: ${mintSig}`);
+    }));
+
+    let mintConfirmation;
+    try {
+      mintConfirmation = await connection.confirmTransaction(
+        mintSig,
+        "finalized"
+      );
+    } catch (error) {
+      throw new Error(
+        `Mint initialization confirmation is unresolved for ${mintSig}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+    if (mintConfirmation.value.err) {
+      updateLaunchState(launchStatePath, (state) => ({
+        ...state,
+        transactions: {
+          ...state.transactions,
+          mintInitialization: {
+            signature: mintSig,
+            submittedAt: mintSubmittedAt,
+            outcome: "rejected",
+          },
+        },
+      }));
+      throw new Error(
+        `Mint initialization transaction was rejected: ${mintSig}`
+      );
+    }
+    updateLaunchState(launchStatePath, (state) => ({
+      ...state,
+      transactions: {
+        ...state.transactions,
+        mintInitialization: {
+          signature: mintSig,
+          submittedAt: mintSubmittedAt,
+          outcome: "confirmed",
+        },
+      },
+    }));
+    currentPhase = "mint_initialized";
+    console.log(`Mint initialized. Tx: ${mintSig}`);
+  }
 
   // Phase 2: attach Metaplex name/symbol/logo metadata to the existing mint.
-  const umi = createUmi(endpoint).use(mplToolbox());
-  const walletKeypair = umi.eddsa.createKeypairFromSecretKey(payer.secretKey);
-  const umiPayer = createSignerFromKeypair(umi, walletKeypair);
-  umi.use(keypairIdentity(umiPayer));
+  if (currentPhase === "mint_initialized") {
+    const umi = createUmi(endpoint).use(mplToolbox());
+    const walletKeypair = umi.eddsa.createKeypairFromSecretKey(payer.secretKey);
+    const umiPayer = createSignerFromKeypair(umi, walletKeypair);
+    umi.use(keypairIdentity(umiPayer));
 
-  // Metaplex's Create instruction requires the mint to co-sign even when the
-  // account already exists (MintIsNotSigner otherwise) — we hold the keypair
-  // in-process from phase 1, so just pass it through.
-  const mintSigner = createSignerFromKeypair(
-    umi,
-    umi.eddsa.createKeypairFromSecretKey(
-      loadMintSigner(mintSignerPath, mintKeypair.publicKey).secretKey
-    )
-  );
+    // Metaplex's Create instruction requires the mint to co-sign even when the
+    // account already exists (MintIsNotSigner otherwise) — we hold the keypair
+    // in-process from phase 1, so just pass it through.
+    const mintSigner = createSignerFromKeypair(
+      umi,
+      umi.eddsa.createKeypairFromSecretKey(
+        loadMintSigner(mintSignerPath, mintKeypair.publicKey).secretKey
+      )
+    );
 
-  const metadataResult = await createFungible(umi, {
-    mint: mintSigner,
-    name: NAME,
-    symbol: SYMBOL,
-    uri: URI,
-    sellerFeeBasisPoints: percentAmount(0),
-    decimals,
-    splTokenProgram: umiPublicKey(TOKEN_2022_PROGRAM_ID.toBase58()),
-  }).sendAndConfirm(umi);
-  updateLaunchState(launchStatePath, (state) => ({
-    ...state,
-    phase: "metadata_attached",
-    transactions: {
-      ...state.transactions,
-      metadataAttachment: {
-        signature: base58.deserialize(metadataResult.signature)[0],
-        submittedAt: new Date().toISOString(),
-        outcome: "confirmed",
+    const metadataBuilder = createFungible(umi, {
+      mint: mintSigner,
+      name: NAME,
+      symbol: SYMBOL,
+      uri: URI,
+      sellerFeeBasisPoints: percentAmount(0),
+      decimals,
+      splTokenProgram: umiPublicKey(TOKEN_2022_PROGRAM_ID.toBase58()),
+    });
+    const metadataSubmittedAt = new Date().toISOString();
+    const metadataSignature = await metadataBuilder.send(umi);
+    const metadataStateSignature = base58.deserialize(metadataSignature)[0];
+    updateLaunchState(launchStatePath, (state) => ({
+      ...state,
+      phase: "metadata_attached",
+      transactions: {
+        ...state.transactions,
+        metadataAttachment: {
+          signature: metadataStateSignature,
+          submittedAt: metadataSubmittedAt,
+          outcome: "unknown",
+        },
       },
-    },
-  }));
-  console.log("Metadata attached");
+    }));
+    let metadataConfirmation;
+    try {
+      metadataConfirmation = await metadataBuilder.confirm(
+        umi,
+        metadataSignature,
+        { commitment: "finalized" }
+      );
+    } catch (error) {
+      throw new Error(
+        `Metadata confirmation is unresolved for ${metadataStateSignature}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+    if (metadataConfirmation.value.err) {
+      updateLaunchState(launchStatePath, (state) => ({
+        ...state,
+        transactions: {
+          ...state.transactions,
+          metadataAttachment: {
+            signature: metadataStateSignature,
+            submittedAt: metadataSubmittedAt,
+            outcome: "rejected",
+          },
+        },
+      }));
+      throw new Error(
+        `Metadata transaction was rejected: ${metadataStateSignature}`
+      );
+    }
+    updateLaunchState(launchStatePath, (state) => ({
+      ...state,
+      transactions: {
+        ...state.transactions,
+        metadataAttachment: {
+          signature: metadataStateSignature,
+          submittedAt: metadataSubmittedAt,
+          outcome: "confirmed",
+        },
+      },
+    }));
+    currentPhase = "metadata_attached";
+    console.log("Metadata attached");
+  }
 
   // Phase 3: mint the initial supply to the payer.
-  const preMintAccount = await connection.getAccountInfo(
-    mintKeypair.publicKey,
-    "confirmed"
-  );
-  if (!preMintAccount) {
-    throw new Error(
-      `Mint account not found before initial mint: ${mintKeypair.publicKey.toBase58()}`
+  if (currentPhase === "metadata_attached") {
+    const preMintAccount = await connection.getAccountInfo(
+      mintKeypair.publicKey,
+      "confirmed"
     );
-  }
-  const preMint = await getMint(
-    connection,
-    mintKeypair.publicKey,
-    "confirmed",
-    TOKEN_2022_PROGRAM_ID
-  );
-  assertPreMintState(
-    {
-      accountOwner: preMintAccount.owner,
-      supply: preMint.supply,
-      decimals: preMint.decimals,
-      mintAuthority: preMint.mintAuthority,
-      freezeAuthority: preMint.freezeAuthority,
-      transferFeeConfig: getTransferFeeConfig(preMint),
-    },
-    {
-      mintAuthority: payer.publicKey,
-      authority: authorityMultisig,
-      decimals,
+    if (!preMintAccount) {
+      throw new Error(
+        `Mint account not found before initial mint: ${mintKeypair.publicKey.toBase58()}`
+      );
     }
-  );
-  const tokenAccount = await getOrCreateAssociatedTokenAccount(
-    connection,
-    payer,
-    mintKeypair.publicKey,
-    payer.publicKey,
-    false,
-    "confirmed",
-    undefined,
-    TOKEN_2022_PROGRAM_ID
-  );
-  const mintToSig = await mintTo(
-    connection,
-    payer,
-    mintKeypair.publicKey,
-    tokenAccount.address,
-    payer,
-    baseUnits,
-    undefined,
-    undefined,
-    TOKEN_2022_PROGRAM_ID
-  );
-  updateLaunchState(launchStatePath, (state) => ({
-    ...state,
-    phase: "supply_minted",
-    transactions: {
-      ...state.transactions,
-      initialMint: {
-        signature: mintToSig,
-        submittedAt: new Date().toISOString(),
-        outcome: "confirmed",
+    const preMint = await getMint(
+      connection,
+      mintKeypair.publicKey,
+      "confirmed",
+      TOKEN_2022_PROGRAM_ID
+    );
+    assertPreMintState(
+      {
+        accountOwner: preMintAccount.owner,
+        supply: preMint.supply,
+        decimals: preMint.decimals,
+        mintAuthority: preMint.mintAuthority,
+        freezeAuthority: preMint.freezeAuthority,
+        transferFeeConfig: getTransferFeeConfig(preMint),
       },
-    },
-  }));
+      {
+        mintAuthority: payer.publicKey,
+        authority: authorityMultisig,
+        decimals,
+      }
+    );
+    const tokenAccount = await getOrCreateAssociatedTokenAccount(
+      connection,
+      payer,
+      mintKeypair.publicKey,
+      payer.publicKey,
+      false,
+      "confirmed",
+      undefined,
+      TOKEN_2022_PROGRAM_ID
+    );
+    const mintToTx = new Transaction().add(
+      createMintToInstruction(
+        mintKeypair.publicKey,
+        tokenAccount.address,
+        payer.publicKey,
+        baseUnits,
+        [],
+        TOKEN_2022_PROGRAM_ID
+      )
+    );
+    const mintToSubmittedAt = new Date().toISOString();
+    const mintToSig = await connection.sendTransaction(mintToTx, [payer]);
+    updateLaunchState(launchStatePath, (state) => ({
+      ...state,
+      phase: "supply_minted",
+      transactions: {
+        ...state.transactions,
+        initialMint: {
+          signature: mintToSig,
+          submittedAt: mintToSubmittedAt,
+          outcome: "unknown",
+        },
+      },
+    }));
 
-  console.log(`Minted ${supplyWholeTokens} ${SYMBOL} to ${payer.publicKey}`);
+    let mintToConfirmation;
+    try {
+      mintToConfirmation = await connection.confirmTransaction(
+        mintToSig,
+        "finalized"
+      );
+    } catch (error) {
+      throw new Error(
+        `Initial mint confirmation is unresolved for ${mintToSig}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+    if (mintToConfirmation.value.err) {
+      updateLaunchState(launchStatePath, (state) => ({
+        ...state,
+        transactions: {
+          ...state.transactions,
+          initialMint: {
+            signature: mintToSig,
+            submittedAt: mintToSubmittedAt,
+            outcome: "rejected",
+          },
+        },
+      }));
+      throw new Error(`Initial mint transaction was rejected: ${mintToSig}`);
+    }
+    updateLaunchState(launchStatePath, (state) => ({
+      ...state,
+      transactions: {
+        ...state.transactions,
+        initialMint: {
+          signature: mintToSig,
+          submittedAt: mintToSubmittedAt,
+          outcome: "confirmed",
+        },
+      },
+    }));
+
+    currentPhase = "supply_minted";
+    console.log(`Minted ${supplyWholeTokens} ${SYMBOL} to ${payer.publicKey}`);
+  }
 
   // Phase 4: revoke mint authority now that the full supply exists — fixes
   // the supply forever, no re-mint possible from here on.
-  const revokeMintAuthTx = new Transaction().add(
-    createSetAuthorityInstruction(
-      mintKeypair.publicKey,
-      payer.publicKey,
-      AuthorityType.MintTokens,
-      null,
-      [],
-      TOKEN_2022_PROGRAM_ID
-    )
-  );
-  const revokeSig = await sendAndConfirmTransaction(
-    connection,
-    revokeMintAuthTx,
-    [payer]
-  );
-  const finalMintAccount = await connection.getAccountInfo(
-    mintKeypair.publicKey,
-    "confirmed"
-  );
-  if (!finalMintAccount) {
-    throw new Error(
-      `Mint account not found during final verification: ${mintKeypair.publicKey.toBase58()}`
-    );
-  }
-  const finalMint = await getMint(
-    connection,
-    mintKeypair.publicKey,
-    "confirmed",
-    TOKEN_2022_PROGRAM_ID
-  );
-  assertFinalMintState(
-    {
-      accountOwner: finalMintAccount.owner,
-      supply: finalMint.supply,
-      decimals: finalMint.decimals,
-      mintAuthority: finalMint.mintAuthority,
-      freezeAuthority: finalMint.freezeAuthority,
-      transferFeeConfig: getTransferFeeConfig(finalMint),
-    },
-    {
-      authority: authorityMultisig,
-      supply: baseUnits,
-      decimals,
+  if (
+    currentPhase === "supply_minted" ||
+    currentPhase === "authority_revoked"
+  ) {
+    let revokedSignature: string | undefined;
+    if (currentPhase === "supply_minted") {
+      const revokeMintAuthTx = new Transaction().add(
+        createSetAuthorityInstruction(
+          mintKeypair.publicKey,
+          payer.publicKey,
+          AuthorityType.MintTokens,
+          null,
+          [],
+          TOKEN_2022_PROGRAM_ID
+        )
+      );
+      const revokeSubmittedAt = new Date().toISOString();
+      const revokeSig = await connection.sendTransaction(revokeMintAuthTx, [
+        payer,
+      ]);
+      revokedSignature = revokeSig;
+      updateLaunchState(launchStatePath, (state) => ({
+        ...state,
+        phase: "authority_revoked",
+        transactions: {
+          ...state.transactions,
+          authorityRevocation: {
+            signature: revokeSig,
+            submittedAt: revokeSubmittedAt,
+            outcome: "unknown",
+          },
+        },
+      }));
+
+      let revokeConfirmation;
+      try {
+        revokeConfirmation = await connection.confirmTransaction(
+          revokeSig,
+          "finalized"
+        );
+      } catch (error) {
+        throw new Error(
+          `Authority revocation confirmation is unresolved for ${revokeSig}: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+      if (revokeConfirmation.value.err) {
+        updateLaunchState(launchStatePath, (state) => ({
+          ...state,
+          transactions: {
+            ...state.transactions,
+            authorityRevocation: {
+              signature: revokeSig,
+              submittedAt: revokeSubmittedAt,
+              outcome: "rejected",
+            },
+          },
+        }));
+        throw new Error(
+          `Authority revocation transaction was rejected: ${revokeSig}`
+        );
+      }
+      updateLaunchState(launchStatePath, (state) => ({
+        ...state,
+        transactions: {
+          ...state.transactions,
+          authorityRevocation: {
+            signature: revokeSig,
+            submittedAt: revokeSubmittedAt,
+            outcome: "confirmed",
+          },
+        },
+      }));
     }
-  );
-  updateLaunchState(launchStatePath, (state) => ({
-    ...state,
-    phase: "authority_revoked",
-    transactions: {
-      ...state.transactions,
-      authorityRevocation: {
-        signature: revokeSig,
-        submittedAt: new Date().toISOString(),
-        outcome: "confirmed",
+
+    const finalMintAccount = await connection.getAccountInfo(
+      mintKeypair.publicKey,
+      "finalized"
+    );
+    if (!finalMintAccount) {
+      throw new Error(
+        `Mint account not found during final verification: ${mintKeypair.publicKey.toBase58()}`
+      );
+    }
+    const finalMint = await getMint(
+      connection,
+      mintKeypair.publicKey,
+      "finalized",
+      TOKEN_2022_PROGRAM_ID
+    );
+    assertFinalMintState(
+      {
+        accountOwner: finalMintAccount.owner,
+        supply: finalMint.supply,
+        decimals: finalMint.decimals,
+        mintAuthority: finalMint.mintAuthority,
+        freezeAuthority: finalMint.freezeAuthority,
+        transferFeeConfig: getTransferFeeConfig(finalMint),
       },
-    },
-  }));
-  updateLaunchState(launchStatePath, (state) => ({
-    ...state,
-    phase: "verified",
-  }));
-  console.log(`Mint authority revoked. Tx: ${revokeSig}`);
+      {
+        authority: authorityMultisig,
+        supply: baseUnits,
+        decimals,
+      }
+    );
+    updateLaunchState(launchStatePath, (state) => ({
+      ...state,
+      phase: "verified",
+    }));
+    currentPhase = "authority_revoked";
+    if (revokedSignature) {
+      console.log(`Mint authority revoked. Tx: ${revokedSignature}`);
+    } else {
+      console.log("Mint authority revocation verified after resume.");
+    }
+  }
 
   console.log(`Mint address: ${mintKeypair.publicKey.toBase58()}`);
+}
+
+async function main() {
+  const launchStatePath = process.env.LAUNCH_STATE;
+  if (!launchStatePath) {
+    await runLaunch();
+    return;
+  }
+  await withLaunchStateLock(launchStatePath, runLaunch);
 }
 
 main().catch((err) => {
