@@ -2,12 +2,15 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
-import Image from "next/image";
-import { ArrowUpRight, CircleDollarSign, ShieldCheck } from "lucide-react";
+import { ArrowDown, ArrowUpRight, CircleDollarSign, Send } from "lucide-react";
 import { motion } from "framer-motion";
 import { MambaTokenCard } from "@/components/mamba-token-card";
 import { MambaBalanceCard } from "@/components/mamba-balance-card";
 import { MambaSendCard } from "@/components/mamba-send-card";
+import { MambaChainStrip } from "@/components/mamba-chain-strip";
+import { SOLANA_CLUSTER } from "@/lib/mamba-config";
+import { SnakeLayer } from "@/components/three/snake-layer";
+import { TiltPanel } from "@/components/tilt-panel";
 
 // WalletMultiButton touches `window`, so it must be client-only, not SSR'd.
 const WalletMultiButton = dynamic(
@@ -18,144 +21,142 @@ const WalletMultiButton = dynamic(
   { ssr: false },
 );
 
+const rise = (delay: number) => ({
+  initial: { opacity: 0, y: 22 },
+  animate: { opacity: 1, y: 0 },
+  transition: { duration: 0.7, delay, ease: [0.22, 1, 0.36, 1] as const },
+});
+
+// Say which network this build talks to; only mainnet is "live on Solana".
+const IS_MAINNET = SOLANA_CLUSTER === "mainnet-beta";
+const NETWORK_LABEL = IS_MAINNET
+  ? "LIVE ON SOLANA"
+  : `SOLANA ${SOLANA_CLUSTER.toUpperCase()}`;
+
 export default function Home() {
   const [balanceRefreshKey, setBalanceRefreshKey] = useState(0);
 
   return (
     <div className="mamba-shell">
-      <main className="mamba-main">
-        <header className="mamba-nav">
+      <div className="mamba-backdrop" aria-hidden>
+        <div className="mamba-aurora mamba-aurora-a" />
+        <div className="mamba-aurora mamba-aurora-b" />
+        <div className="mamba-aurora mamba-aurora-c" />
+        <div className="mamba-floor" />
+        <div className="mamba-noise" />
+      </div>
+      <SnakeLayer />
+
+      <header className="mamba-nav">
+        <div className="mamba-nav-inner">
           <a className="mamba-brand" href="#top" aria-label="MAMBA home">
-            <span className="mamba-brand-mark">M</span>
+            <span className="mamba-brand-mark">
+              <span>M</span>
+            </span>
             <span>MAMBA</span>
           </a>
+          <nav className="mamba-nav-links" aria-label="Sections">
+            <a href="#overview">Overview</a>
+            <a href="#wallet">Wallet</a>
+            <a href="#send">Send</a>
+            <a href="#contract">Contract</a>
+          </nav>
           <div className="mamba-nav-meta">
             <WalletMultiButton />
           </div>
-        </header>
+        </div>
+      </header>
 
+      <main className="mamba-main">
         <section className="mamba-hero" id="top">
           <div className="mamba-hero-copy">
-            <motion.div
-              initial={{ opacity: 0, y: 18 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.55 }}
-              className="mamba-kicker"
-            >
-              <span className="mamba-kicker-line" /> DIGITAL CURRENCY / 001
+            <motion.div {...rise(0)} className="mamba-chip">
+              <span
+                className={`mamba-chip-dot${IS_MAINNET ? "" : " is-test"}`}
+              />{" "}
+              {NETWORK_LABEL}
+              <span className="mamba-chip-sep" /> TOKEN-2022
             </motion.div>
-            <motion.h1
-              initial={{ opacity: 0, y: 18 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.55, delay: 0.08 }}
-            >
+            <motion.h1 {...rise(0.08)}>
               Stay sharp.
               <br />
-              <em>Move</em> MAMBA.
+              <em>Move</em> <span className="mamba-h1-glow">MAMBA.</span>
             </motion.h1>
-            <motion.p
-              initial={{ opacity: 0, y: 18 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.55, delay: 0.16 }}
-              className="mamba-hero-description"
-            >
+            <motion.p {...rise(0.16)} className="mamba-hero-description">
               A live Token-2022 wallet for MAMBA. Track the supply, hold your
               balance, and send with confidence.
             </motion.p>
-            <motion.div
-              initial={{ opacity: 0, y: 18 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.55, delay: 0.24 }}
-              className="mamba-hero-actions"
-            >
+            <motion.div {...rise(0.24)} className="mamba-hero-actions">
               <a className="mamba-primary-link" href="#wallet">
                 Open wallet <ArrowUpRight size={16} />
               </a>
-              <span className="mamba-status">
-                <span /> LIVE ON SOLANA
-              </span>
+              <a className="mamba-ghost-link" href="#overview">
+                Explore token <ArrowDown size={15} />
+              </a>
             </motion.div>
           </div>
-
+          {/* Deliberately empty: open ground for the roaming snake. */}
+          <div className="mamba-hero-stage" aria-hidden />
           <motion.div
-            initial={{ opacity: 0, scale: 0.92, rotate: 4 }}
-            animate={{ opacity: 1, scale: 1, rotate: 0 }}
-            transition={{ duration: 0.8, delay: 0.12 }}
-            className="mamba-hero-art"
+            {...rise(0.32)}
+            className="mamba-hero-strip"
+            id="overview"
           >
-            <div className="mamba-art-ring mamba-art-ring-one" />
-            <div className="mamba-art-ring mamba-art-ring-two" />
-            <div className="mamba-art-label">M / 2025</div>
-            <Image
-              src="/mamba-snake.webp"
-              alt="MAMBA snake mark"
-              width={360}
-              height={360}
-              priority
-              className="mamba-snake-art"
-            />
-            <div className="mamba-art-caption">
-              THE COIL
-              <br />
-              <span>IS THE CURRENT</span>
-            </div>
+            <MambaChainStrip />
           </motion.div>
-        </section>
-
-        <section className="mamba-stats-band" aria-label="MAMBA overview">
-          <div>
-            <span>ASSET</span>
-            <strong>
-              MAMBA <small>$MAMBA</small>
-            </strong>
-          </div>
-          <div>
-            <span>STANDARD</span>
-            <strong>Token-2022</strong>
-          </div>
-          <div>
-            <span>TRANSFER TAX</span>
-            <strong>
-              0.00% <small>INACTIVE</small>
-            </strong>
-          </div>
-          <div>
-            <span>PROTECTION</span>
-            <strong>
-              <ShieldCheck size={17} /> FIXED SUPPLY
-            </strong>
-          </div>
         </section>
 
         <section className="mamba-workspace" id="wallet">
           <div className="mamba-section-heading">
             <div>
-              <span className="mamba-kicker">YOUR COMMAND DECK</span>
+              <span className="mamba-kicker">
+                <span className="mamba-kicker-line" /> YOUR COMMAND DECK
+              </span>
               <h2>Wallet intelligence</h2>
             </div>
-            <span className="mamba-section-index">02 / 03</span>
           </div>
           <div className="mamba-panels">
-            <div className="mamba-panel mamba-panel-balance">
+            <TiltPanel className="mamba-panel-balance">
               <div className="mamba-panel-icon">
                 <CircleDollarSign size={20} />
               </div>
               <MambaBalanceCard refreshKey={balanceRefreshKey} />
-            </div>
-            <div className="mamba-panel mamba-panel-token">
-              <MambaTokenCard />
-            </div>
-            <div className="mamba-panel mamba-panel-send">
+            </TiltPanel>
+            {/* Low tilt: this panel holds form inputs. */}
+            <TiltPanel
+              className="mamba-panel-send"
+              id="send"
+              maxTilt={1.5}
+              delay={0.08}
+            >
+              <div className="mamba-panel-icon">
+                <Send size={18} />
+              </div>
               <MambaSendCard
                 refreshKey={balanceRefreshKey}
                 onSent={() => setBalanceRefreshKey((k) => k + 1)}
               />
-            </div>
+            </TiltPanel>
           </div>
         </section>
 
+        {/* The padding above this section is open ground for the snake. */}
+        <section className="mamba-contract" id="contract">
+          <div className="mamba-section-heading">
+            <div>
+              <span className="mamba-kicker">
+                <span className="mamba-kicker-line" /> ON-CHAIN REFERENCE
+              </span>
+              <h2>Contract details</h2>
+            </div>
+          </div>
+          <TiltPanel className="mamba-panel-token">
+            <MambaTokenCard />
+          </TiltPanel>
+        </section>
+
         <footer className="mamba-footer">
-          <span>MAMBA / BUILT ON SOLANA</span>
+          <span>MAMBA / BUILT ON SOLANA · {SOLANA_CLUSTER.toUpperCase()}</span>
           <span>© 2025 MAMBA</span>
         </footer>
       </main>
