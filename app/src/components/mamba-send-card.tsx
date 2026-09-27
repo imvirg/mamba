@@ -21,6 +21,7 @@ import {
 } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ConnectHint } from "@/components/connect-hint";
 
 type SendStatus =
   | { phase: "idle" | "submitting" }
@@ -159,9 +160,10 @@ export function MambaSendCard({
       <p className="text-sm text-muted-foreground">Send {MAMBA_SYMBOL}</p>
 
       {!connected && (
-        <p className="mt-1 text-lg font-medium text-card-foreground">
-          Connect your wallet to send {MAMBA_SYMBOL}
-        </p>
+        <ConnectHint>
+          Connect a wallet with the button at the top right to send{" "}
+          {MAMBA_SYMBOL}.
+        </ConnectHint>
       )}
 
       {connected && (

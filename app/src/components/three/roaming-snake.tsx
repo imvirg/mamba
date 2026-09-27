@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Environment, Lightformer, Sparkles } from "@react-three/drei";
 import * as THREE from "three";
+import { SNAKE_EVENT, type SnakeCue } from "@/lib/snake-events";
 
 const SEGMENTS = 96;
 const RADIAL = 20;
@@ -17,12 +18,17 @@ const BELLY = new THREE.Color("#f5b84b");
 const UP = new THREE.Vector3(0, 0, 1);
 
 /**
- * While the hero is on screen, the snake prefers to roam the hero's open
- * right column (`.mamba-hero-stage`) instead of the whole screen, so it
- * rarely lingers over the headline. The preference fades out as you scroll
- * past the hero. Set to false to go back to roaming the whole screen evenly.
+ * The snake prefers to roam "stages": empty areas the page marks with
+ * `data-snake-stage` (the hero's right column, the gap above the contract,
+ * the column beside the contract card). It follows whichever stage is most
+ * on screen, easing between them, and roams the whole screen when none is.
+ * Set to false to go back to roaming the whole screen evenly.
  */
-const FAVOR_HERO_STAGE = true;
+const FAVOR_STAGES = true;
+/** Content the snake steers out from behind (it's drawn beneath it). */
+const AVOID_SELECTOR = ".mamba-panel, .mamba-chain";
+/** Phones get a smaller close-up so the snake stays a mascot. */
+const DEPTH_NEAR_MOBILE = 3;
 
 const CAMERA_Z = 10;
 
@@ -71,6 +77,26 @@ const screenZone = (bx: number, by: number): Zone => ({
 
 type Point = { x: number; y: number; z: number };
 
+/** Axis-aligned box in screen-space world units (center + half-size). */
+type Box = { cx: number; cy: number; hx: number; hy: number };
+
+/** Everything that steers the snake this frame, besides its own whims. */
+type Steer = {
+  zone: Zone;
+  /** Nearest depth allowed. */
+  near: number;
+  /** Body length, for keeping a close (big) snake inside its zone. */
+  length: number;
+  /** Boxes to slither out from behind. */
+  avoid: Box[];
+  /** A point to head for (a cue), with how hard to pull (0-1). */
+  target: { x: number; y: number; pull: number } | null;
+  /** Coil in tight loops (the "curl" cue). */
+  coil: boolean;
+  /** Speed multiplier (the "lunge" cue darts). */
+  dash: number;
+};
+
 type Wander = {
   history: Point[];
   heading: number;
@@ -94,6 +120,8 @@ type Wander = {
   nextDepth: number;
   /** Eased mouth opening, 0 closed to 1 open. */
   mouth: number;
+  /** Eased head turn (radians) toward whatever it's looking at. */
+  look: number;
   /** Current dive/rise slope (depth change per unit travelled), eased. */
   pitch: number;
 };
@@ -375,8 +403,17 @@ function step(
   by: number,
   k: number,
   scroll: number,
-  zone: Zone = screenZone(bx, by),
+  steer: Steer = {
+    zone: screenZone(bx, by),
+    near: DEPTH_NEAR,
+    length: 0,
+    avoid: [],
+    target: null,
+    coil: false,
+    dash: 1,
+  },
 ) {
+  const { zone, near } = steer;
   s.time += dt;
   if (s.time > s.nextChange) {
     s.turnTarget = (Math.random() * 2 - 1) * 1.1;
@@ -395,18 +432,20 @@ function step(
       s.depthTarget = THREE.MathUtils.clamp(
         z + (Math.random() * 2 - 1) * 4,
         DEPTH_FAR,
-        DEPTH_NEAR,
+        near,
       );
     } else {
-      s.depthTarget = THREE.MathUtils.lerp(
-        DEPTH_FAR,
-        DEPTH_NEAR,
-        Math.random(),
-      );
+      s.depthTarget = THREE.MathUtils.lerp(DEPTH_FAR, near, Math.random());
     }
     s.nextDepth = s.time + 2.5 + Math.random() * 7.5;
   }
-  s.turn += (s.turnTarget - s.turn) * Math.min(1, dt * 1.5);
+  // E.g. rotating a phone to portrait lowers the limit mid-dive.
+  s.depthTarget = Math.min(s.depthTarget, near);
+  // Coiling: turn hard one way (loops); otherwise the usual meander.
+  const turnTarget = steer.coil
+    ? Math.sign(s.turnTarget || 1) * 2.6
+    : s.turnTarget;
+  s.turn += (turnTarget - s.turn) * Math.min(1, dt * 1.5);
   s.speed += (s.speedTarget - s.speed) * Math.min(1, dt * 0.8);
 
   const head = s.history[s.history.length - 1];
@@ -415,11 +454,16 @@ function step(
   const persp = CAMERA_Z / (CAMERA_Z - head.z);
   const screenX = head.x * persp;
   const screenY = (head.y + scroll) * persp;
+  // A close snake looks bigger, so keep its head nearer the zone's middle
+  // or its body spills past the zone (and under the header).
+  const grow = Math.max(0, persp - 1) * steer.length * 0.3;
+  const hx = Math.max(0.3, zone.hx - grow);
+  const hy = Math.max(0.3, zone.hy - grow);
   // 0 inside the comfortable zone, rising to 1 at the screen edge (and
   // beyond). Everything below scales smoothly with it, so the path never
   // kinks when the snake crosses a threshold.
-  const edgeX = Math.max(0, Math.abs(screenX - zone.cx) - zone.hx) / zone.fx;
-  const edgeY = Math.max(0, Math.abs(screenY - zone.cy) - zone.hy) / zone.fy;
+  const edgeX = Math.max(0, Math.abs(screenX - zone.cx) - hx) / zone.fx;
+  const edgeY = Math.max(0, Math.abs(screenY - zone.cy) - hy) / zone.fy;
   const edge = THREE.MathUtils.smoothstep(Math.max(edgeX, edgeY), 0, 1);
 
   let heading = s.heading + s.turn * dt;
@@ -427,6 +471,29 @@ function step(
   if (edge > 0) {
     const home = Math.atan2(zone.cy - screenY, zone.cx - screenX);
     heading += wrapAngle(home - heading) * Math.min(1, dt * 5 * edge);
+  }
+  // Behind a panel: head for its nearest edge, harder the deeper it is.
+  const margin = 0.25;
+  for (const box of steer.avoid) {
+    const ox = box.hx + margin - Math.abs(screenX - box.cx);
+    const oy = box.hy + margin - Math.abs(screenY - box.cy);
+    if (ox <= 0 || oy <= 0) continue;
+    const out =
+      ox < oy
+        ? screenX < box.cx
+          ? Math.PI
+          : 0
+        : screenY < box.cy
+        ? -Math.PI / 2
+        : Math.PI / 2;
+    const depth = Math.min(1, Math.min(ox, oy) / margin);
+    heading += wrapAngle(out - heading) * Math.min(1, dt * 3 * (0.4 + depth));
+  }
+  // A cue's target outranks wandering.
+  if (steer.target) {
+    const aim = Math.atan2(steer.target.y - screenY, steer.target.x - screenX);
+    heading +=
+      wrapAngle(aim - heading) * Math.min(1, dt * 4 * steer.target.pull);
   }
   s.heading = wrapAngle(heading);
 
@@ -442,7 +509,7 @@ function step(
   const rush = Math.sqrt(boost);
   s.phase += dt * 3.2 * rush;
   const dir = s.heading + (Math.sin(s.phase) * 0.55) / rush;
-  const dist = s.speed * boost * k * dt;
+  const dist = s.speed * boost * steer.dash * k * dt;
   // Drift in depth. The slope itself is eased, so dives start and level
   // out gradually instead of kinking; it aims to close the gap over about
   // four units of travel, capped at MAX_PITCH.
@@ -560,7 +627,30 @@ function Snake({ still }: { still: boolean }) {
   const fangs = useRef<(THREE.Group | null)[]>([]);
   const lowerJaw = useRef<THREE.Group>(null);
   const wander = useRef<Wander | null>(null);
-  const stageEl = useRef<Element | null>(null);
+  // Page geometry the snake reacts to, re-queried about once a second.
+  const page = useRef({
+    stages: [] as Element[],
+    avoid: [] as Element[],
+    nav: null as Element | null,
+    queriedAt: -Infinity,
+  });
+  /** The zone it's actually steering by, eased toward the chosen stage. */
+  const zoneNow = useRef<Zone | null>(null);
+  // Cues from the page (see lib/snake-events).
+  const pendingCue = useRef<SnakeCue | null>(null);
+  const lookAt = useRef<string | null>(null);
+  const action = useRef<{
+    type: "lunge" | "curl";
+    target: string;
+    until: number;
+  } | null>(null);
+  useEffect(() => {
+    const onCue = (e: Event) => {
+      pendingCue.current = (e as CustomEvent<SnakeCue>).detail;
+    };
+    window.addEventListener(SNAKE_EVENT, onCue);
+    return () => window.removeEventListener(SNAKE_EVENT, onCue);
+  }, []);
   // Per-frame scratch space, reused to avoid allocating in the render loop.
   const scratch = useRef({
     spine: Array.from({ length: SEGMENTS }, () => new THREE.Vector3()),
@@ -589,8 +679,24 @@ function Snake({ still }: { still: boolean }) {
     const scroll = still ? 0 : window.scrollY * unitsPerPx;
 
     if (!wander.current) {
+      // Start (and, with reduced motion, stay) inside the first stage
+      // on screen, so the pose never sits behind content.
+      const unitsPerPx0 = height / state.size.height;
+      let warm = screenZone(bx, by);
+      const stage = document.querySelector("[data-snake-stage]");
+      const r = stage?.getBoundingClientRect();
+      if (FAVOR_STAGES && r && r.width > 0 && r.height > 0) {
+        warm = {
+          cx: (r.left + r.width / 2 - state.size.width / 2) * unitsPerPx0,
+          cy: (state.size.height / 2 - (r.top + r.height / 2)) * unitsPerPx0,
+          hx: Math.max(0.3, (r.width / 2) * unitsPerPx0 - R * 2),
+          hy: Math.max(0.3, (r.height / 2) * unitsPerPx0 - R * 2),
+          fx: 0.4,
+          fy: 0.4,
+        };
+      }
       const s: Wander = {
-        history: [{ x: bx * 0.6, y: -by * 0.75 - scroll, z: 0 }],
+        history: [{ x: warm.cx, y: warm.cy - warm.hy * 0.8 - scroll, z: 0 }],
         heading: Math.PI * 0.65,
         turn: 0,
         turnTarget: 0.3,
@@ -607,10 +713,21 @@ function Snake({ still }: { still: boolean }) {
         depthTarget: 0,
         nextDepth: 2,
         mouth: 0,
+        look: 0,
         pitch: 0,
       };
       // Warm up so the snake starts fully extended, not as a dot.
-      for (let i = 0; i < 300; i++) step(s, 1 / 60, bx, by, k, scroll);
+      const warmSteer: Steer = {
+        zone: warm,
+        near: 0,
+        length,
+        avoid: [],
+        target: null,
+        coil: false,
+        dash: 1,
+      };
+      for (let i = 0; i < 300; i++)
+        step(s, 1 / 60, bx, by, k, scroll, warmSteer);
       wander.current = s;
     }
     const s = wander.current;
@@ -626,52 +743,143 @@ function Snake({ still }: { still: boolean }) {
       translate(s, edge - screenY);
     }
 
-    let zone = screenZone(bx, by);
-    if (FAVOR_HERO_STAGE) {
-      if (!stageEl.current?.isConnected) {
-        stageEl.current = document.querySelector(".mamba-hero-stage");
-      }
-      const rect = stageEl.current?.getBoundingClientRect();
-      if (rect && rect.height > 0) {
-        // Share of the stage on screen: 1 at the top of the page, fading to
-        // 0 as the hero scrolls away, so the preference hands back smoothly.
+    const dt = Math.min(rawDelta, 1 / 20);
+    const now = state.clock.elapsedTime;
+    const { width: pxW, height: pxH } = state.size;
+    // Screen px -> the screen-space world units the snake steers in.
+    const toBox = (r: DOMRect, inset = 0): Box => ({
+      cx: (r.left + r.width / 2 - pxW / 2) * unitsPerPx,
+      cy: (pxH / 2 - (r.top + r.height / 2)) * unitsPerPx,
+      hx: Math.max(0, r.width / 2 - inset) * unitsPerPx,
+      hy: Math.max(0, r.height / 2 - inset) * unitsPerPx,
+    });
+
+    const pg = page.current;
+    if (now - pg.queriedAt > 1) {
+      pg.stages = Array.from(document.querySelectorAll("[data-snake-stage]"));
+      pg.avoid = Array.from(document.querySelectorAll(AVOID_SELECTOR));
+      pg.nav = document.querySelector(".mamba-nav");
+      pg.queriedAt = now;
+    }
+    // Nothing (stage or zone) may reach under the sticky header.
+    const topPx = (pg.nav?.getBoundingClientRect().bottom ?? 0) + 24;
+    const topLimit = (pxH / 2 - topPx) * unitsPerPx;
+
+    // Pick the stage most on screen; with none showing, roam the screen.
+    let zoneTarget = screenZone(bx, by);
+    if (FAVOR_STAGES) {
+      let best = 0;
+      for (const el of pg.stages) {
+        const r = el.getBoundingClientRect();
+        const top = Math.max(r.top, topPx);
         const visible =
-          Math.max(
-            0,
-            Math.min(rect.bottom, state.size.height) - Math.max(rect.top, 0),
-          ) / rect.height;
-        const w = THREE.MathUtils.smoothstep(visible, 0, 0.6);
-        // Stage rect in the same screen-space world units the snake uses.
-        const toX = (px: number) => (px - state.size.width / 2) * unitsPerPx;
-        const toY = (py: number) => (state.size.height / 2 - py) * unitsPerPx;
-        const stage: Zone = {
-          cx: toX(rect.left + rect.width / 2),
-          cy: toY(rect.top + rect.height / 2),
-          hx: Math.max(0.3, (rect.width / 2) * unitsPerPx - R * 2),
-          hy: Math.max(0.3, (rect.height / 2) * unitsPerPx - R * 2),
+          Math.max(0, Math.min(r.bottom, pxH) - top) *
+          Math.max(0, Math.min(r.right, pxW) - Math.max(r.left, 0));
+        if (visible < pxW * pxH * 0.04 || visible <= best) continue;
+        best = visible;
+        const clipped = new DOMRect(r.left, top, r.width, r.bottom - top);
+        const box = toBox(clipped, R / unitsPerPx);
+        zoneTarget = {
+          ...box,
+          hx: Math.max(0.3, box.hx),
+          hy: Math.max(0.3, box.hy),
           fx: Math.max(0.4, bx * 0.2),
           fy: Math.max(0.4, by * 0.2),
-        };
-        const lerp = THREE.MathUtils.lerp;
-        zone = {
-          cx: lerp(zone.cx, stage.cx, w),
-          cy: lerp(zone.cy, stage.cy, w),
-          hx: lerp(zone.hx, stage.hx, w),
-          hy: lerp(zone.hy, stage.hy, w),
-          fx: lerp(zone.fx, stage.fx, w),
-          fy: lerp(zone.fy, stage.fy, w),
         };
       }
     }
 
-    if (!still) step(s, Math.min(rawDelta, 1 / 20), bx, by, k, scroll, zone);
+    // Cues from the page.
+    const cue = pendingCue.current;
+    if (cue) {
+      pendingCue.current = null;
+      if (cue.type === "clear") lookAt.current = null;
+      else if (cue.type === "look") lookAt.current = cue.target;
+      // A lunge isn't interrupted by a curl (a send reloads the balance).
+      else if (cue.type === "lunge" || action.current?.type !== "lunge") {
+        action.current = {
+          type: cue.type,
+          target: cue.target,
+          until: now + (cue.type === "lunge" ? 2.6 : 4.5),
+        };
+      }
+    }
+    if (action.current && now > action.current.until) action.current = null;
+
+    const lead0 = s.history[s.history.length - 1];
+    const persp0 = CAMERA_Z / (CAMERA_Z - lead0.z);
+    const headX = lead0.x * persp0;
+    const headY = (lead0.y + scroll) * persp0;
+    let target: Steer["target"] = null;
+    let coil = false;
+    let dash = 1;
+    let bite = 0;
+    const act = action.current;
+    const actEl = act && document.querySelector(act.target);
+    if (act && actEl) {
+      // Head for the nearest point just outside the target's edge, so it
+      // stays visible rather than slipping behind the panel.
+      const b = toBox(actEl.getBoundingClientRect());
+      const m = 0.35;
+      let tx = THREE.MathUtils.clamp(headX, b.cx - b.hx - m, b.cx + b.hx + m);
+      let ty = THREE.MathUtils.clamp(headY, b.cy - b.hy - m, b.cy + b.hy + m);
+      if (tx === headX && ty === headY) {
+        // Already over it: go to the nearest side.
+        const dx = b.hx + m - Math.abs(headX - b.cx);
+        const dy = b.hy + m - Math.abs(headY - b.cy);
+        if (dx < dy) tx = b.cx + Math.sign(headX - b.cx || 1) * (b.hx + m);
+        else ty = b.cy + Math.sign(headY - b.cy || 1) * (b.hy + m);
+      }
+      ty = Math.min(ty, topLimit);
+      const d = Math.hypot(tx - headX, ty - headY);
+      zoneTarget = { cx: tx, cy: ty, hx: 0.5, hy: 0.5, fx: 0.6, fy: 0.6 };
+      if (act.type === "lunge") {
+        target = { x: tx, y: ty, pull: 1 };
+        dash = d > 0.6 ? 1.9 : 1;
+        bite = 1 - THREE.MathUtils.smoothstep(d, 0.5, 1.4);
+      } else {
+        target = d > 0.8 ? { x: tx, y: ty, pull: 0.7 } : null;
+        coil = d <= 1.2;
+      }
+    }
+
+    // Ease the zone so switching stages (or cues) never kinks the path.
+    const zn = (zoneNow.current ??= { ...zoneTarget });
+    const ease = Math.min(1, dt * (act ? 3 : 1.2));
+    for (const key of ["cx", "cy", "hx", "hy", "fx", "fy"] as const) {
+      zn[key] += (zoneTarget[key] - zn[key]) * ease;
+    }
+    const zone = { ...zn };
+    if (zone.cy + zone.hy > topLimit) {
+      const bottom = zone.cy - zone.hy;
+      zone.hy = Math.max(0.3, (topLimit - bottom) / 2);
+      zone.cy = topLimit - zone.hy;
+    }
+
+    const avoid: Box[] = [];
+    for (const el of pg.avoid) {
+      const r = el.getBoundingClientRect();
+      if (r.bottom < 0 || r.top > pxH || r.width === 0) continue;
+      avoid.push(toBox(r));
+    }
+
+    const steer: Steer = {
+      zone,
+      near: pxW < 560 ? DEPTH_NEAR_MOBILE : DEPTH_NEAR,
+      length,
+      avoid,
+      target,
+      coil,
+      dash,
+    };
+
+    if (!still) step(s, dt, bx, by, k, scroll, steer);
 
     sampleSpine(s.history, length / (SEGMENTS - 1), spine);
     for (const p of spine) p.y += scroll;
 
     // Swallowed speckles travel down the body as a bulge.
     const f = FEED;
-    const now = state.clock.elapsedTime;
     f.gulps = f.gulps.filter((g) => now - g < GULP_TIME);
 
     const { attributes } = bodyMesh.current.geometry;
@@ -747,7 +955,7 @@ function Snake({ still }: { still: boolean }) {
       f.active = !still;
       f.mouth.copy(head.current.position).addScaledVector(t, R * 2.2);
       f.reach = R * 1.8;
-      const want = still ? 0 : f.hunger;
+      const want = still ? 0 : Math.max(f.hunger, bite);
       const rate = want > s.mouth ? 10 : 4;
       s.mouth += (want - s.mouth) * Math.min(1, rawDelta * rate);
       upperJaw.current?.rotation.set(0, -UPPER_JAW_OPEN * s.mouth, 0);
@@ -755,6 +963,30 @@ function Snake({ still }: { still: boolean }) {
       const fangLength = THREE.MathUtils.smoothstep(s.mouth, 0.35, 0.9);
       for (const fang of fangs.current) {
         fang?.scale.setScalar(Math.max(fangLength, 0.001));
+      }
+
+      // Turn the head (not the body) toward whatever it's cued to look at.
+      const lookEl =
+        !still && lookAt.current
+          ? document.querySelector(lookAt.current)
+          : null;
+      let lookWant = 0;
+      if (lookEl) {
+        const b = toBox(lookEl.getBoundingClientRect());
+        const hp = head.current.position;
+        const hpersp = CAMERA_Z / (CAMERA_Z - hp.z);
+        const aim = Math.atan2(b.cy - hp.y * hpersp, b.cx - hp.x * hpersp);
+        lookWant = THREE.MathUtils.clamp(
+          wrapAngle(aim - Math.atan2(t.y, t.x)),
+          -0.9,
+          0.9,
+        );
+      }
+      s.look += (lookWant - s.look) * Math.min(1, rawDelta * 4);
+      if (Math.abs(s.look) > 1e-4) {
+        const c = Math.cos(s.look);
+        const sn = Math.sin(s.look);
+        t.set(t.x * c - t.y * sn, t.x * sn + t.y * c, t.z);
       }
 
       // Tip the snout toward the camera when rising (and when lunging for

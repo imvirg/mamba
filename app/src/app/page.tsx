@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useWallet } from "@solana/wallet-adapter-react";
 import dynamic from "next/dynamic";
 import { ArrowDown, ArrowUpRight, CircleDollarSign, Send } from "lucide-react";
 import { motion } from "framer-motion";
@@ -8,9 +9,10 @@ import { MambaTokenCard } from "@/components/mamba-token-card";
 import { MambaBalanceCard } from "@/components/mamba-balance-card";
 import { MambaSendCard } from "@/components/mamba-send-card";
 import { MambaChainStrip } from "@/components/mamba-chain-strip";
-import { SOLANA_CLUSTER } from "@/lib/mamba-config";
+import { MAMBA_SYMBOL, SOLANA_CLUSTER } from "@/lib/mamba-config";
 import { SnakeLayer } from "@/components/three/snake-layer";
 import { TiltPanel } from "@/components/tilt-panel";
+import { cueSnake } from "@/lib/snake-events";
 
 // WalletMultiButton touches `window`, so it must be client-only, not SSR'd.
 const WalletMultiButton = dynamic(
@@ -30,17 +32,57 @@ const rise = (delay: number) => ({
 // Say which network this build talks to; only mainnet is "live on Solana".
 const IS_MAINNET = SOLANA_CLUSTER === "mainnet-beta";
 const NETWORK_LABEL = IS_MAINNET
-  ? "LIVE ON SOLANA"
-  : `SOLANA ${SOLANA_CLUSTER.toUpperCase()}`;
+  ? "Live on Solana"
+  : `Solana ${SOLANA_CLUSTER}`;
+
+/**
+ * When someone heads to the wallet section while disconnected, briefly
+ * pulse the header wallet button (the page's only one) so they know where
+ * to connect.
+ */
+function useWalletCue(connected: boolean) {
+  useEffect(() => {
+    if (connected) return;
+    let timers: number[] = [];
+    const onClick = (e: MouseEvent) => {
+      const link = (e.target as Element | null)?.closest("a[href]");
+      const href = link?.getAttribute("href");
+      if (href !== "#wallet" && href !== "#send") return;
+      const button = document.querySelector(
+        ".mamba-nav .wallet-adapter-button",
+      );
+      if (!button) return;
+      timers.forEach(clearTimeout);
+      button.classList.remove("is-cue");
+      // Wait for the smooth scroll to land before pulsing.
+      timers = [
+        window.setTimeout(() => button.classList.add("is-cue"), 450),
+        window.setTimeout(() => button.classList.remove("is-cue"), 1800),
+      ];
+    };
+    document.addEventListener("click", onClick);
+    return () => {
+      document.removeEventListener("click", onClick);
+      timers.forEach(clearTimeout);
+    };
+  }, [connected]);
+}
+
+const BALANCE_GLARE = {
+  color: "rgba(85, 215, 255, 0.24)",
+  size: 460,
+  rest: [88, 100] as [number, number],
+};
 
 export default function Home() {
   const [balanceRefreshKey, setBalanceRefreshKey] = useState(0);
+  const { connected } = useWallet();
+  useWalletCue(connected);
 
   return (
     <div className="mamba-shell">
       <div className="mamba-backdrop" aria-hidden>
         <div className="mamba-aurora mamba-aurora-a" />
-        <div className="mamba-aurora mamba-aurora-b" />
         <div className="mamba-aurora mamba-aurora-c" />
         <div className="mamba-floor" />
         <div className="mamba-noise" />
@@ -75,11 +117,9 @@ export default function Home() {
                 className={`mamba-chip-dot${IS_MAINNET ? "" : " is-test"}`}
               />{" "}
               {NETWORK_LABEL}
-              <span className="mamba-chip-sep" /> TOKEN-2022
+              <span className="mamba-chip-sep" /> Token-2022
             </motion.div>
             <motion.h1 {...rise(0.08)}>
-              Stay sharp.
-              <br />
               <em>Move</em> <span className="mamba-h1-glow">MAMBA.</span>
             </motion.h1>
             <motion.p {...rise(0.16)} className="mamba-hero-description">
@@ -87,7 +127,19 @@ export default function Home() {
               balance, and send with confidence.
             </motion.p>
             <motion.div {...rise(0.24)} className="mamba-hero-actions">
-              <a className="mamba-primary-link" href="#wallet">
+              <a
+                className="mamba-primary-link"
+                href="#wallet"
+                // The snake turns to look at the main action.
+                onPointerEnter={() =>
+                  cueSnake({ type: "look", target: ".mamba-primary-link" })
+                }
+                onFocus={() =>
+                  cueSnake({ type: "look", target: ".mamba-primary-link" })
+                }
+                onPointerLeave={() => cueSnake({ type: "clear" })}
+                onBlur={() => cueSnake({ type: "clear" })}
+              >
                 Open wallet <ArrowUpRight size={16} />
               </a>
               <a className="mamba-ghost-link" href="#overview">
@@ -96,7 +148,7 @@ export default function Home() {
             </motion.div>
           </div>
           {/* Deliberately empty: open ground for the roaming snake. */}
-          <div className="mamba-hero-stage" aria-hidden />
+          <div className="mamba-hero-stage" data-snake-stage aria-hidden />
           <motion.div
             {...rise(0.32)}
             className="mamba-hero-strip"
@@ -108,15 +160,12 @@ export default function Home() {
 
         <section className="mamba-workspace" id="wallet">
           <div className="mamba-section-heading">
-            <div>
-              <span className="mamba-kicker">
-                <span className="mamba-kicker-line" /> YOUR COMMAND DECK
-              </span>
-              <h2>Wallet intelligence</h2>
-            </div>
+            <h2>Your wallet</h2>
+            <p>Check your {MAMBA_SYMBOL} balance and send it to anyone.</p>
           </div>
           <div className="mamba-panels">
-            <TiltPanel className="mamba-panel-balance">
+            {/* Brighter cursor glow, starting bottom-right. */}
+            <TiltPanel className="mamba-panel-balance" glare={BALANCE_GLARE}>
               <div className="mamba-panel-icon">
                 <CircleDollarSign size={20} />
               </div>
@@ -134,29 +183,33 @@ export default function Home() {
               </div>
               <MambaSendCard
                 refreshKey={balanceRefreshKey}
-                onSent={() => setBalanceRefreshKey((k) => k + 1)}
+                onSent={() => {
+                  setBalanceRefreshKey((k) => k + 1);
+                  cueSnake({ type: "lunge", target: "#send" });
+                }}
               />
             </TiltPanel>
           </div>
         </section>
 
-        {/* The padding above this section is open ground for the snake. */}
+        {/* Open ground for the snake between the wallet and the contract. */}
+        <div className="mamba-gap-stage" data-snake-stage aria-hidden />
         <section className="mamba-contract" id="contract">
-          <div className="mamba-section-heading">
-            <div>
-              <span className="mamba-kicker">
-                <span className="mamba-kicker-line" /> ON-CHAIN REFERENCE
-              </span>
-              <h2>Contract details</h2>
+          <div className="mamba-contract-main">
+            <div className="mamba-section-heading">
+              <h2>Contract</h2>
+              <p>Reference details for the {MAMBA_SYMBOL} mint.</p>
             </div>
+            <TiltPanel className="mamba-panel-token">
+              <MambaTokenCard />
+            </TiltPanel>
           </div>
-          <TiltPanel className="mamba-panel-token">
-            <MambaTokenCard />
-          </TiltPanel>
+          {/* Empty column beside the card: another stage for the snake. */}
+          <div className="mamba-contract-stage" data-snake-stage aria-hidden />
         </section>
 
         <footer className="mamba-footer">
-          <span>MAMBA / BUILT ON SOLANA · {SOLANA_CLUSTER.toUpperCase()}</span>
+          <span>MAMBA · Built on Solana ({SOLANA_CLUSTER})</span>
           <span>© 2025 MAMBA</span>
         </footer>
       </main>

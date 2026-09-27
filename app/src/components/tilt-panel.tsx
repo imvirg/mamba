@@ -12,6 +12,21 @@ import { cn } from "@/lib/utils";
 
 const SPRING = { stiffness: 220, damping: 22, mass: 0.6 };
 
+type Glare = {
+  /** CSS color at the glow's center. */
+  color: string;
+  /** Glow radius in px. */
+  size: number;
+  /** Where the glow starts (percent x, y), before the cursor moves it. */
+  rest: [number, number];
+};
+
+const DEFAULT_GLARE: Glare = {
+  color: "rgba(85, 215, 255, 0.13)",
+  size: 520,
+  rest: [50, 0],
+};
+
 /**
  * Glass panel that tilts toward the cursor in 3D and tracks a glare
  * highlight. Touch and reduced-motion users get the static panel.
@@ -20,6 +35,7 @@ export function TiltPanel({
   className,
   maxTilt = 6,
   delay = 0,
+  glare: glareStyle = DEFAULT_GLARE,
   id,
   children,
 }: {
@@ -28,6 +44,8 @@ export function TiltPanel({
   maxTilt?: number;
   /** Stagger for the scroll-in reveal, in seconds. */
   delay?: number;
+  /** Cursor-following glow; defaults to a faint cyan sheen from the top. */
+  glare?: Glare;
   id?: string;
   children: React.ReactNode;
 }) {
@@ -36,9 +54,13 @@ export function TiltPanel({
 
   const rotateX = useSpring(0, SPRING);
   const rotateY = useSpring(0, SPRING);
-  const glareX = useMotionValue(50);
-  const glareY = useMotionValue(0);
-  const glare = useMotionTemplate`radial-gradient(520px circle at ${glareX}% ${glareY}%, rgba(85, 215, 255, 0.13), transparent 45%)`;
+  const [restX, restY] = glareStyle.rest;
+  // Tracks the cursor and stays where it left the panel.
+  const glareX = useMotionValue(restX);
+  const glareY = useMotionValue(restY);
+  const glareSize = useMotionValue(glareStyle.size);
+  const glareColor = useMotionValue(glareStyle.color);
+  const glare = useMotionTemplate`radial-gradient(${glareSize}px circle at ${glareX}% ${glareY}%, ${glareColor}, transparent 45%)`;
 
   function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
     if (e.pointerType !== "mouse" || !ref.current) return;

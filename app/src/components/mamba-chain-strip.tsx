@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy, ExternalLink } from "lucide-react";
+import { AlertTriangle, Check, Copy, ExternalLink } from "lucide-react";
 import { useMambaTokenStats } from "@/lib/use-mamba-token";
 import { MAMBA_MINT, explorerAddressUrl } from "@/lib/mamba-config";
 import { formatTokenAmount, truncateAddress } from "@/lib/format";
@@ -23,7 +23,15 @@ function Cell({
     <div className="mamba-chain-cell">
       <span className="mamba-chain-label">{label}</span>
       <strong className="mamba-chain-value">{value}</strong>
-      {note && <span className={`mamba-chain-note is-${tone}`}>{note}</span>}
+      {note && (
+        <span className={`mamba-chain-note is-${tone}`}>
+          {/* Warnings carry an icon so they don't rely on color alone. */}
+          {tone === "warn" && (
+            <AlertTriangle size={13} role="img" aria-label="Warning" />
+          )}
+          {note}
+        </span>
+      )}
     </div>
   );
 }
@@ -66,7 +74,7 @@ export function MambaChainStrip() {
   return (
     <div className="mamba-chain" aria-busy={loading}>
       <div className="mamba-chain-head">
-        <span className="mamba-chain-live" /> LIVE ON-CHAIN
+        <span className="mamba-chain-live" /> Live on-chain
       </div>
 
       {stats.status === "error" ? (
