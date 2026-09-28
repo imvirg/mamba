@@ -119,16 +119,34 @@ describe("validate-launch-readiness", () => {
   });
 
   it("requires expected governance configuration for a devnet authority", () => {
-    const result = runValidator({
-      CLUSTER: "devnet",
-      AUTHORITY_MULTISIG: "11111111111111111111111111111111",
-      EXPECTED_MULTISIG: undefined,
-      EXPECTED_THRESHOLD: undefined,
-      EXPECTED_MEMBERS: undefined,
+    // Needs a real wallet file so the validator gets past the wallet check
+    // to the governance check (CI has no ~/.config/solana/id.json).
+    const walletPath = path.join(
+      process.cwd(),
+      "tests",
+      `.mamba-devnet-governance-wallet-${process.pid}.json`
+    );
+    const wallet = Keypair.generate();
+    fs.writeFileSync(walletPath, JSON.stringify(Array.from(wallet.secretKey)), {
+      mode: 0o600,
     });
+    try {
+      const result = runValidator({
+        CLUSTER: "devnet",
+        AUTHORITY_MULTISIG: "11111111111111111111111111111111",
+        WALLET: walletPath,
+        EXPECTED_MULTISIG: undefined,
+        EXPECTED_THRESHOLD: undefined,
+        EXPECTED_MEMBERS: undefined,
+      });
 
-    expect(result.status).to.equal(1);
-    expect(result.output).to.contain("Set EXPECTED_THRESHOLD=<value> env var");
+      expect(result.status).to.equal(1);
+      expect(result.output).to.contain(
+        "Set EXPECTED_THRESHOLD=<value> env var"
+      );
+    } finally {
+      fs.rmSync(walletPath, { force: true });
+    }
   });
 
   it("rejects an unapproved mainnet authority", () => {
