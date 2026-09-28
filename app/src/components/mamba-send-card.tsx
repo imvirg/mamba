@@ -13,7 +13,12 @@ import {
   useMambaTokenStats,
   useMambaWalletBalance,
 } from "@/lib/use-mamba-token";
-import { MAMBA_MINT, MAMBA_SYMBOL, explorerTxUrl } from "@/lib/mamba-config";
+import {
+  MAMBA_MINT,
+  MAMBA_SYMBOL,
+  SOLANA_CLUSTER,
+  explorerTxUrl,
+} from "@/lib/mamba-config";
 import {
   parseTokenAmount,
   tokenAmountToInputValue,
@@ -22,6 +27,29 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ConnectHint } from "@/components/connect-hint";
+
+// Wallets wrap their failures (the adapter keeps the original in `.error`)
+// and often say only "Internal error", so turn the common cases into
+// something a person can act on.
+function sendErrorMessage(err: unknown): string {
+  const inner = (err as { error?: { code?: unknown; message?: unknown } })
+    ?.error;
+  const text = `${err instanceof Error ? err.message : ""} ${
+    typeof inner?.message === "string" ? inner.message : ""
+  }`;
+  if (inner?.code === 4001 || /reject|denied|cancel/i.test(text)) {
+    return "You cancelled the transaction in your wallet.";
+  }
+  if (/internal error|blockhash not found/i.test(text)) {
+    return `Your wallet couldn't send this. Make sure it's set to ${SOLANA_CLUSTER} and try again.`;
+  }
+  if (/insufficient (funds|lamports)/i.test(text)) {
+    return "Not enough SOL in your wallet to pay the network fee.";
+  }
+  return err instanceof Error && err.message
+    ? err.message
+    : "Transaction failed";
+}
 
 type SendStatus =
   | { phase: "idle" | "submitting" }
@@ -148,10 +176,7 @@ export function MambaSendCard({
       setRecipient("");
       onSent();
     } catch (err) {
-      setStatus({
-        phase: "error",
-        message: err instanceof Error ? err.message : "Transaction failed",
-      });
+      setStatus({ phase: "error", message: sendErrorMessage(err) });
     }
   }
 
