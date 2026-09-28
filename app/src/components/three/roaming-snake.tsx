@@ -27,10 +27,14 @@ const UP = new THREE.Vector3(0, 0, 1);
 const FAVOR_STAGES = true;
 /** Content the snake steers out from behind (it's drawn beneath it). */
 const AVOID_SELECTOR = ".mamba-panel, .mamba-chain";
-/** Phones get a smaller close-up so the snake stays a mascot. */
-const DEPTH_NEAR_MOBILE = 3;
-
 const CAMERA_Z = 10;
+
+/**
+ * Phones get a smaller close-up so the snake stays a mascot: at most this
+ * many times its normal size (the depth follows from CAMERA_Z / (CAMERA_Z - z)).
+ */
+const MAX_GROW_MOBILE = 3;
+const DEPTH_NEAR_MOBILE = CAMERA_Z - CAMERA_Z / MAX_GROW_MOBILE;
 
 /**
  * Depth range the snake wanders through (world z; the camera sits at
