@@ -12,8 +12,7 @@ dist
 
 # Only keep the single best-quality logo PNG from the design export, plus its metadata
 mamba/**
-!mamba/MAMBA-logo-original/
-!mamba/MAMBA-logo-original/icon-transparent/
-!mamba/MAMBA-logo-original/icon-transparent/original_1024_transparent.png
+!mamba/MAMBA-logo-mascot/
+!mamba/MAMBA-logo-mascot/mascot_512.png
 !mamba/metadata.json
 !mamba/audit-readiness.md
