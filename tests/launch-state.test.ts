@@ -142,6 +142,38 @@ describe("launch state", () => {
     }
   });
 
+  it("records the revoke checkpoint before it confirms", () => {
+    const confirmed = {
+      signature: "signature",
+      submittedAt: "2026-09-03T00:00:00.000Z",
+      outcome: "confirmed" as const,
+    };
+    const transactions = {
+      mintInitialization: confirmed,
+      metadataAttachment: confirmed,
+      initialMint: confirmed,
+      authorityRevocation: { ...confirmed, outcome: "unknown" as const },
+    };
+
+    expect(
+      parseLaunchState(makeState({ phase: "authority_revoked", transactions }))
+        .phase
+    ).to.equal("authority_revoked");
+    expect(() =>
+      parseLaunchState(makeState({ phase: "verified", transactions }))
+    ).to.throw(
+      "Verified launch state requires a confirmed authorityRevocation transaction"
+    );
+    expect(() =>
+      parseLaunchState(
+        makeState({
+          phase: "authority_revoked",
+          transactions: { ...transactions, authorityRevocation: null },
+        })
+      )
+    ).to.throw("phase requires the authorityRevocation checkpoint");
+  });
+
   it("allows only the next forward phase", () => {
     const state = parseLaunchState(makeState());
     const configured = transitionLaunchState(state, "mint_initialized");

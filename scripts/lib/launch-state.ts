@@ -194,6 +194,14 @@ function validatePhaseEvidence(
   requireTransactionCheckpoint(transactions.initialMint, "initialMint");
   if (phase === "supply_minted") return;
 
+  // Recorded as soon as the revoke is sent (outcome still unknown), like
+  // every earlier phase; only "verified" demands confirmed outcomes.
+  requireTransactionCheckpoint(
+    transactions.authorityRevocation,
+    "authorityRevocation"
+  );
+  if (phase === "authority_revoked") return;
+
   requireConfirmedTransaction(
     transactions.mintInitialization,
     "mintInitialization"
