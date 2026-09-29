@@ -12,6 +12,12 @@ import { accounts, getVaultPda, PROGRAM_ID, types } from "@sqds/multisig";
 import { resolveClusterEndpoint } from "../shared/mamba";
 import { requireEnv } from "./lib/solana";
 import { requireTransferFeeConfig } from "./lib/mint-validation";
+import { assertAutonomousMultisig } from "./lib/authority";
+import {
+  findMetadataAddress,
+  parseMetadataAuthority,
+  TOKEN_METADATA_PROGRAM_ID,
+} from "./lib/metadata-authority";
 
 const CLUSTER = requireEnv("CLUSTER");
 const MINT = new PublicKey(requireEnv("MINT"));
@@ -94,6 +100,7 @@ async function main() {
       "Expected authority must have at least two voters and a threshold of at least two"
     );
   }
+  assertAutonomousMultisig(multisig.configAuthority);
   if (multisig.threshold !== expectedThreshold) {
     throw new Error(
       `Multisig threshold mismatch: expected ${expectedThreshold}, found ${multisig.threshold}`
@@ -160,6 +167,30 @@ async function main() {
       "Withdraw-withheld authority",
       withdrawAuthOk,
       feeConfig.withdrawWithheldAuthority?.toBase58() ?? "unset"
+    )
+  );
+  const metadataAddress = findMetadataAddress(MINT);
+  const metadataAccount = await connection.getAccountInfo(
+    metadataAddress,
+    "confirmed"
+  );
+  const metadata =
+    metadataAccount && metadataAccount.owner.equals(TOKEN_METADATA_PROGRAM_ID)
+      ? parseMetadataAuthority(metadataAccount.owner, metadataAccount.data)
+      : null;
+  const metadataOk =
+    metadata !== null &&
+    metadata.mint.equals(MINT) &&
+    metadata.updateAuthority.equals(EXPECTED_AUTHORITY);
+  results.push(
+    report(
+      "Metadata update authority",
+      metadataOk,
+      metadata
+        ? `${metadata.updateAuthority.toBase58()} (${
+            metadata.isMutable ? "mutable" : "immutable"
+          })`
+        : `no Token Metadata account at ${metadataAddress.toBase58()}`
     )
   );
   console.log(

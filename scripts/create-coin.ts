@@ -60,6 +60,11 @@ import {
 } from "./lib/launch-state-store";
 import { LaunchPhase } from "./lib/launch-state";
 import { createMintSigner, loadMintSigner } from "./lib/mint-signer";
+import {
+  assertMetadataAuthority,
+  findMetadataAddress,
+  parseMetadataAuthority,
+} from "./lib/metadata-authority";
 import { parseLaunchConfig } from "./lib/launch-config";
 import { MAMBA_MAINNET_AUTHORITY } from "../shared/mamba";
 
@@ -357,6 +362,9 @@ async function runLaunch() {
       sellerFeeBasisPoints: percentAmount(0),
       decimals,
       splTokenProgram: umiPublicKey(TOKEN_2022_PROGRAM_ID.toBase58()),
+      // Governance, not the payer, may rewrite name/symbol/URI (Metaplex
+      // otherwise defaults the update authority to the payer).
+      updateAuthority: umiPublicKey(authorityMultisig.toBase58()),
     });
     const metadataSubmittedAt = new Date().toISOString();
     const metadataSignature = await metadataBuilder.send(umi);
@@ -635,6 +643,20 @@ async function runLaunch() {
         supply: baseUnits,
         decimals,
       }
+    );
+    const metadataAddress = findMetadataAddress(mintKeypair.publicKey);
+    const metadataAccount = await connection.getAccountInfo(
+      metadataAddress,
+      "finalized"
+    );
+    if (!metadataAccount) {
+      throw new Error(
+        `Metadata account not found during final verification: ${metadataAddress.toBase58()}`
+      );
+    }
+    assertMetadataAuthority(
+      parseMetadataAuthority(metadataAccount.owner, metadataAccount.data),
+      { mint: mintKeypair.publicKey, authority: authorityMultisig }
     );
     updateLaunchState(launchStatePath, (state) => ({
       ...state,

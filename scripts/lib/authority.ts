@@ -52,6 +52,17 @@ export function loadSquadsAuthorityConfig(
   };
 }
 
+// A Squads "controlled" multisig has a config authority that can add or
+// remove members and change the threshold without a vote, so its
+// threshold is not a real guarantee. Only autonomous multisigs qualify.
+export function assertAutonomousMultisig(configAuthority: PublicKey): void {
+  if (!configAuthority.equals(PublicKey.default)) {
+    throw new Error(
+      `Multisig has a config authority (${configAuthority.toBase58()}) that can change members and threshold without a vote; use an autonomous multisig`
+    );
+  }
+}
+
 export async function validateSquadsAuthority(
   connection: Connection,
   config: SquadsAuthorityConfig
@@ -85,6 +96,7 @@ export async function validateSquadsAuthority(
     .map((member) => member.toBase58())
     .sort();
 
+  assertAutonomousMultisig(multisig.configAuthority);
   if (multisig.threshold !== config.threshold) {
     throw new Error(
       `Multisig threshold mismatch: expected ${config.threshold}, found ${multisig.threshold}`
