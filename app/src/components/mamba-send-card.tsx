@@ -28,27 +28,43 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ConnectHint } from "@/components/connect-hint";
 
-// Wallets wrap their failures (the adapter keeps the original in `.error`)
-// and often say only "Internal error", so turn the common cases into
-// something a person can act on.
+// A transaction that landed but failed on-chain (confirmTransaction reports
+// this in its result instead of throwing).
+class FailedOnChainError extends Error {}
+
+// Wallets wrap their failures (the adapter keeps the original in `.error`),
+// and RPC errors carry program logs in the message, so match specific
+// phrases and fall back to a generic message rather than guess.
 function sendErrorMessage(err: unknown): string {
+  if (err instanceof FailedOnChainError) {
+    return "The transaction failed on the network, so nothing was sent. Check your balance and try again.";
+  }
   const inner = (err as { error?: { code?: unknown; message?: unknown } })
     ?.error;
   const text = `${err instanceof Error ? err.message : ""} ${
     typeof inner?.message === "string" ? inner.message : ""
   }`;
-  if (inner?.code === 4001 || /reject|denied|cancel/i.test(text)) {
+  if (
+    inner?.code === 4001 ||
+    /user rejected|rejected the request|user denied|user cancell?ed/i.test(text)
+  ) {
     return "You cancelled the transaction in your wallet.";
   }
-  if (/internal error|blockhash not found/i.test(text)) {
-    return `Your wallet couldn't send this. Make sure it's set to ${SOLANA_CLUSTER} and try again.`;
-  }
-  if (/insufficient (funds|lamports)/i.test(text)) {
+  if (
+    /insufficient lamports|insufficient funds for (fee|rent)|no record of a prior credit/i.test(
+      text
+    )
+  ) {
     return "Not enough SOL in your wallet to pay the network fee.";
   }
-  return err instanceof Error && err.message
-    ? err.message
-    : "Transaction failed";
+  // Token program wording when the source account is short of tokens.
+  if (/insufficient funds/i.test(text)) {
+    return `Not enough ${MAMBA_SYMBOL} in your wallet for this amount.`;
+  }
+  if (/blockhash not found/i.test(text)) {
+    return `Your wallet isn't on ${SOLANA_CLUSTER}. Switch its network and try again.`;
+  }
+  return `Your wallet couldn't send this transaction. Check it's set to ${SOLANA_CLUSTER} and has SOL for fees, then try again.`;
 }
 
 type SendStatus =
@@ -166,10 +182,11 @@ export function MambaSendCard({
       }).add(...instructions);
 
       const signature = await sendTransaction(tx, connection);
-      await connection.confirmTransaction(
+      const confirmation = await connection.confirmTransaction(
         { signature, ...latestBlockhash },
         "confirmed"
       );
+      if (confirmation.value.err) throw new FailedOnChainError();
 
       setStatus({ phase: "success", signature });
       setAmount("");
