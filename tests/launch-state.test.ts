@@ -27,6 +27,7 @@ function makeState(overrides: Partial<LaunchState> = {}): LaunchState {
     decimals: 9,
     supplyWholeTokens: "100000000",
     supplyBaseUnits: "100000000000000000",
+    teamAllocationBps: 2000,
     metadata: {
       name: "MAMBA",
       symbol: "MAMBA",

@@ -25,7 +25,9 @@ import {
   createInitializeMintInstruction,
   createSetAuthorityInstruction,
   createMintToInstruction,
-  getOrCreateAssociatedTokenAccount,
+  createAssociatedTokenAccountIdempotentInstruction,
+  getAccount,
+  getAssociatedTokenAddressSync,
   getMint,
   getTransferFeeConfig,
 } from "@solana/spl-token";
@@ -91,6 +93,9 @@ async function runLaunch() {
     supplyBaseUnits,
     transferFeeBps,
     transferFeeMaxBaseUnits,
+    teamAllocationBps,
+    teamBaseUnits,
+    airdropBaseUnits,
   } = launchConfig;
   const launchId = requireEnv("LAUNCH_ID");
   const launchStatePath = requireEnv("LAUNCH_STATE");
@@ -142,6 +147,7 @@ async function runLaunch() {
       decimals,
       supplyWholeTokens: supplyWholeTokens.toString(),
       supplyBaseUnits: supplyBaseUnits.toString(),
+      teamAllocationBps,
       metadata: { name: NAME, symbol: SYMBOL, uri: URI },
     };
     if (
@@ -155,6 +161,7 @@ async function runLaunch() {
       existingState.decimals !== expectedConfig.decimals ||
       existingState.supplyWholeTokens !== expectedConfig.supplyWholeTokens ||
       existingState.supplyBaseUnits !== expectedConfig.supplyBaseUnits ||
+      existingState.teamAllocationBps !== expectedConfig.teamAllocationBps ||
       JSON.stringify(existingState.metadata) !==
         JSON.stringify(expectedConfig.metadata) ||
       existingState.mintSignerKeyRef !== mintSignerPath ||
@@ -218,6 +225,7 @@ async function runLaunch() {
       decimals,
       supplyWholeTokens: supplyWholeTokens.toString(),
       supplyBaseUnits: baseUnits.toString(),
+      teamAllocationBps,
       metadata: { name: NAME, symbol: SYMBOL, uri: URI },
       transactions: {
         mintInitialization: null,
@@ -241,6 +249,11 @@ async function runLaunch() {
   console.log(`Mint:  ${mintKeypair.publicKey.toBase58()}`);
   console.log(`Transfer fee: ${transferFeeBps} bps`);
   console.log(`Fee/withdraw authority: ${authorityMultisig.toBase58()}`);
+  console.log(
+    `Supply split: ${
+      teamAllocationBps / 100
+    }% to the governance vault, the rest to the payer for the airdrop`
+  );
 
   // Phase 1: create the mint account with the TransferFeeConfig extension.
   // Metaplex's create instruction (below) can't allocate extension space, so
@@ -458,26 +471,61 @@ async function runLaunch() {
         decimals,
       }
     );
-    const tokenAccount = await getOrCreateAssociatedTokenAccount(
-      connection,
-      payer,
+    // One transaction creates both token accounts and mints both shares, so
+    // the split lands together or not at all. The team share goes straight
+    // to the governance vault (a PDA, hence allowOwnerOffCurve) instead of
+    // sitting on this hot wallet.
+    const payerTokenAccount = getAssociatedTokenAddressSync(
       mintKeypair.publicKey,
       payer.publicKey,
       false,
-      "confirmed",
-      undefined,
       TOKEN_2022_PROGRAM_ID
     );
-    const mintToTx = new Transaction().add(
-      createMintToInstruction(
-        mintKeypair.publicKey,
-        tokenAccount.address,
-        payer.publicKey,
-        baseUnits,
-        [],
-        TOKEN_2022_PROGRAM_ID
-      )
+    const vaultTokenAccount = getAssociatedTokenAddressSync(
+      mintKeypair.publicKey,
+      authorityMultisig,
+      true,
+      TOKEN_2022_PROGRAM_ID
     );
+    const mintToTx = new Transaction();
+    if (airdropBaseUnits > 0n) {
+      mintToTx.add(
+        createAssociatedTokenAccountIdempotentInstruction(
+          payer.publicKey,
+          payerTokenAccount,
+          payer.publicKey,
+          mintKeypair.publicKey,
+          TOKEN_2022_PROGRAM_ID
+        ),
+        createMintToInstruction(
+          mintKeypair.publicKey,
+          payerTokenAccount,
+          payer.publicKey,
+          airdropBaseUnits,
+          [],
+          TOKEN_2022_PROGRAM_ID
+        )
+      );
+    }
+    if (teamBaseUnits > 0n) {
+      mintToTx.add(
+        createAssociatedTokenAccountIdempotentInstruction(
+          payer.publicKey,
+          vaultTokenAccount,
+          authorityMultisig,
+          mintKeypair.publicKey,
+          TOKEN_2022_PROGRAM_ID
+        ),
+        createMintToInstruction(
+          mintKeypair.publicKey,
+          vaultTokenAccount,
+          payer.publicKey,
+          teamBaseUnits,
+          [],
+          TOKEN_2022_PROGRAM_ID
+        )
+      );
+    }
     const mintToSubmittedAt = new Date().toISOString();
     const mintToSig = await connection.sendTransaction(mintToTx, [payer]);
     updateLaunchState(launchStatePath, (state) => ({
@@ -533,7 +581,13 @@ async function runLaunch() {
     }));
 
     currentPhase = "supply_minted";
-    console.log(`Minted ${supplyWholeTokens} ${SYMBOL} to ${payer.publicKey}`);
+    console.log(
+      `Minted ${supplyWholeTokens} ${SYMBOL}: ${
+        teamAllocationBps / 100
+      }% to vault ${authorityMultisig.toBase58()}, the rest to ${
+        payer.publicKey
+      }`
+    );
   }
 
   // Phase 4: revoke mint authority now that the full supply exists — fixes
@@ -644,6 +698,27 @@ async function runLaunch() {
         decimals,
       }
     );
+    if (teamBaseUnits > 0n) {
+      const vaultAccount = await getAccount(
+        connection,
+        getAssociatedTokenAddressSync(
+          mintKeypair.publicKey,
+          authorityMultisig,
+          true,
+          TOKEN_2022_PROGRAM_ID
+        ),
+        "finalized",
+        TOKEN_2022_PROGRAM_ID
+      );
+      if (
+        !vaultAccount.owner.equals(authorityMultisig) ||
+        vaultAccount.amount !== teamBaseUnits
+      ) {
+        throw new Error(
+          `Governance vault must hold the team share of ${teamBaseUnits} base units, found ${vaultAccount.amount}`
+        );
+      }
+    }
     const metadataAddress = findMetadataAddress(mintKeypair.publicKey);
     const metadataAccount = await connection.getAccountInfo(
       metadataAddress,

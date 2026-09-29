@@ -35,6 +35,7 @@ export interface LaunchState {
   decimals: number;
   supplyWholeTokens: string;
   supplyBaseUnits: string;
+  teamAllocationBps: number;
   metadata: {
     name: string;
     symbol: string;
@@ -75,6 +76,7 @@ const allowedFields = new Set([
   "decimals",
   "supplyWholeTokens",
   "supplyBaseUnits",
+  "teamAllocationBps",
   "metadata",
   "transactions",
   "createdAt",
@@ -306,6 +308,15 @@ export function parseLaunchState(value: unknown): LaunchState {
     );
   }
 
+  const teamAllocationBps = requireInteger(
+    input.teamAllocationBps,
+    "teamAllocationBps",
+    0
+  );
+  if (teamAllocationBps > 10000) {
+    throw new Error("teamAllocationBps must be at most 10000");
+  }
+
   const parsedTransactions = {
     mintInitialization: parseTransaction(
       transactionInput.mintInitialization,
@@ -347,6 +358,7 @@ export function parseLaunchState(value: unknown): LaunchState {
     decimals,
     supplyWholeTokens,
     supplyBaseUnits,
+    teamAllocationBps,
     metadata: {
       name: requireString(metadataInput.name, "metadata.name"),
       symbol: requireString(metadataInput.symbol, "metadata.symbol"),

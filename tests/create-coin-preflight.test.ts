@@ -30,6 +30,7 @@ const explicitDevnetConfig = {
   SUPPLY: "1000",
   TRANSFER_FEE_BPS: "0",
   TRANSFER_FEE_MAX_BASE_UNITS: "18446744073709551615",
+  TEAM_ALLOCATION_BPS: "2000",
 };
 
 describe("create-coin preflight", function () {
@@ -110,6 +111,7 @@ describe("create-coin preflight", function () {
       decimals: 9,
       supplyWholeTokens: "1000",
       supplyBaseUnits: "1000000000000",
+      teamAllocationBps: 2000,
       metadata: {
         name: "MAMBA",
         symbol: "MAMBA",

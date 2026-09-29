@@ -7,6 +7,7 @@ const validEnvironment = {
   SUPPLY: "1000",
   TRANSFER_FEE_BPS: "0",
   TRANSFER_FEE_MAX_BASE_UNITS: MAMBA_U64_MAX.toString(),
+  TEAM_ALLOCATION_BPS: "2000",
 };
 
 describe("launch configuration", () => {
@@ -32,6 +33,39 @@ describe("launch configuration", () => {
 
     expect(config.supplyWholeTokens).to.equal(1000n);
     expect(config.supplyBaseUnits).to.equal(1000000000000n);
+  });
+
+  it("splits supply into a 20% team share and an 80% airdrop share", () => {
+    const config = parseLaunchConfig(validEnvironment, {
+      requireExplicitValues: true,
+    });
+
+    expect(config.teamAllocationBps).to.equal(2000);
+    expect(config.teamBaseUnits).to.equal(200000000000n);
+    expect(config.airdropBaseUnits).to.equal(800000000000n);
+  });
+
+  it("requires an explicit team allocation for launches", () => {
+    expect(() =>
+      parseLaunchConfig(
+        { ...validEnvironment, TEAM_ALLOCATION_BPS: undefined },
+        { requireExplicitValues: true }
+      )
+    ).to.throw("TEAM_ALLOCATION_BPS is required");
+    expect(() =>
+      parseLaunchConfig({ ...validEnvironment, TEAM_ALLOCATION_BPS: "10001" })
+    ).to.throw("TEAM_ALLOCATION_BPS must be an integer between 0 and 10000");
+  });
+
+  it("rejects a team allocation that splits base units", () => {
+    expect(() =>
+      parseLaunchConfig({
+        ...validEnvironment,
+        DECIMALS: "0",
+        SUPPLY: "3",
+        TEAM_ALLOCATION_BPS: "2000",
+      })
+    ).to.throw("TEAM_ALLOCATION_BPS must split SUPPLY into whole base units");
   });
 
   it("rejects decimals outside Token-2022 bounds", () => {

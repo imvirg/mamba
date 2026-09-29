@@ -18,6 +18,11 @@ export interface LaunchConfig {
   supplyBaseUnits: bigint;
   transferFeeBps: number;
   transferFeeMaxBaseUnits: bigint;
+  /** Share of supply minted straight to the governance vault (team). */
+  teamAllocationBps: number;
+  teamBaseUnits: bigint;
+  /** The rest, minted to the payer for the airdrop. */
+  airdropBaseUnits: bigint;
 }
 
 function requireCanonicalUnsignedInteger(
@@ -116,6 +121,22 @@ export function parseLaunchConfig(
     );
   }
 
+  const teamAllocationBps = parseIntegerInRange(
+    env,
+    "TEAM_ALLOCATION_BPS",
+    0n,
+    10000n,
+    "2000",
+    requireExplicitValues
+  );
+  if ((supplyBaseUnits * BigInt(teamAllocationBps)) % 10000n !== 0n) {
+    throw new Error(
+      "TEAM_ALLOCATION_BPS must split SUPPLY into whole base units"
+    );
+  }
+  const teamBaseUnits = (supplyBaseUnits * BigInt(teamAllocationBps)) / 10000n;
+  const airdropBaseUnits = supplyBaseUnits - teamBaseUnits;
+
   return {
     cluster: rawCluster as MambaCluster,
     decimals,
@@ -123,5 +144,8 @@ export function parseLaunchConfig(
     supplyBaseUnits,
     transferFeeBps,
     transferFeeMaxBaseUnits,
+    teamAllocationBps,
+    teamBaseUnits,
+    airdropBaseUnits,
   };
 }

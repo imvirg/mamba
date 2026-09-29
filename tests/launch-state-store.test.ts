@@ -30,6 +30,7 @@ function makeState(): LaunchState {
     decimals: 2,
     supplyWholeTokens: "1000",
     supplyBaseUnits: "100000",
+    teamAllocationBps: 2000,
     metadata: {
       name: "MAMBA",
       symbol: "MAMBA",
