@@ -35,6 +35,7 @@ import { createUmi } from "@metaplex-foundation/umi-bundle-defaults";
 import {
   createSignerFromKeypair,
   keypairIdentity,
+  none,
   percentAmount,
   publicKey as umiPublicKey,
   base58,
@@ -378,6 +379,10 @@ async function runLaunch() {
       // Governance, not the payer, may rewrite name/symbol/URI (Metaplex
       // otherwise defaults the update authority to the payer).
       updateAuthority: umiPublicKey(authorityMultisig.toBase58()),
+      // Metaplex otherwise lists the payer as a verified creator, which the
+      // program rejects once the payer isn't the update authority; creators
+      // carry no rights on a fungible token anyway.
+      creators: none(),
     });
     const metadataSubmittedAt = new Date().toISOString();
     const metadataSignature = await metadataBuilder.send(umi);
