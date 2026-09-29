@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import {
+  ExtensionType,
   getAssociatedTokenAddressSync,
+  getExtensionTypes,
   getMint,
   getTransferFeeConfig,
   TOKEN_2022_PROGRAM_ID,
@@ -18,6 +20,8 @@ export type MambaTokenStats = {
   freezeAuthority: string | null;
   transferFeeBps: number;
   transferFeeMaxBaseUnits: bigint;
+  /** Token-2022 extensions enabled on the mint, e.g. "TransferFeeConfig". */
+  extensions: string[];
 };
 
 type LoadState<T> =
@@ -90,6 +94,9 @@ export function useMambaTokenStats(): LoadState<MambaTokenStats> {
       freezeAuthority: mint.freezeAuthority?.toBase58() ?? null,
       transferFeeBps: activeFee?.transferFeeBasisPoints ?? 0,
       transferFeeMaxBaseUnits: activeFee?.maximumFee ?? 0n,
+      extensions: getExtensionTypes(mint.tlvData).map(
+        (type) => ExtensionType[type] ?? `Extension ${type}`
+      ),
     };
   });
 }

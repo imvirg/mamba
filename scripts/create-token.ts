@@ -5,13 +5,19 @@ import {
   getOrCreateAssociatedTokenAccount,
   mintTo,
 } from "@solana/spl-token";
-import { loadWalletKeypair, resolveClusterEndpoint } from "./lib/solana";
+import {
+  loadWalletKeypair,
+  requireEnv,
+  requireNonProductionCluster,
+  resolveClusterEndpoint,
+} from "./lib/solana";
 
-const CLUSTER = process.env.CLUSTER ?? "localhost"; // localhost | devnet | testnet | mainnet-beta
+const CLUSTER = requireEnv("CLUSTER");
 const DECIMALS = Number(process.env.DECIMALS ?? 9);
 const INITIAL_SUPPLY = BigInt(process.env.INITIAL_SUPPLY ?? "1000000000"); // in base units
 
 async function main() {
+  requireNonProductionCluster(CLUSTER, "create-token");
   const endpoint = resolveClusterEndpoint(CLUSTER);
   const connection = new Connection(endpoint, "confirmed");
   const payer = loadWalletKeypair();

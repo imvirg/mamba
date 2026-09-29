@@ -17,8 +17,10 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - name: Install Solana CLI
+        # Pinned: "stable" moved to v4.3 on 2026-09-28 and broke
+        # test_initialize with no change on our side. Bump deliberately.
         run: |
-          sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)"
+          sh -c "$(curl -sSfL https://release.anza.xyz/v4.2.2/install)"
           echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
       - name: Build on-chain program (.so)
         run: cargo build-sbf --manifest-path programs/token_program/Cargo.toml
@@ -37,5 +39,67 @@ jobs:
         with:
           node-version: "24"
       - run: npm ci
-      - name: lint
+      - name: Root tests
+        run: npm test
+      - name: Root typecheck
+        run: npm run typecheck
+      - name: Root lint
         run: npm run lint
+      - name: App typecheck
+        run: npm run typecheck --workspace app
+      - name: App lint
+        run: npm run lint --workspace app
+      - name: App build
+        run: NEXT_PUBLIC_SOLANA_CLUSTER=devnet npm run build --workspace app
+      - name: Readiness dry-run smoke check
+        run: |
+          CLUSTER=localhost \
+          DECIMALS=9 \
+          SUPPLY=1000 \
+          TRANSFER_FEE_BPS=0 \
+          TRANSFER_FEE_MAX_BASE_UNITS=18446744073709551615 \
+          TEAM_ALLOCATION_BPS=2000 \
+          WALLET=/tmp/mamba-ci-wallet-does-not-exist.json \
+          npm run validate:launch
+      - name: Default readiness must reject missing governance
+        run: |
+          if CLUSTER=devnet \
+            DECIMALS=9 \
+            SUPPLY=1000 \
+            TRANSFER_FEE_BPS=0 \
+            TRANSFER_FEE_MAX_BASE_UNITS=18446744073709551615 \
+            TEAM_ALLOCATION_BPS=2000 \
+            WALLET=/tmp/mamba-ci-wallet-does-not-exist.json \
+            npm run validate:launch; then
+            echo "Default readiness unexpectedly passed without governance."
+            exit 1
+          fi
+      - name: Strict readiness must reject missing governance
+        run: |
+          if CLUSTER=devnet \
+            STRICT_LAUNCH=1 \
+            DECIMALS=9 \
+            SUPPLY=1000 \
+            TRANSFER_FEE_BPS=0 \
+            TRANSFER_FEE_MAX_BASE_UNITS=18446744073709551615 \
+            TEAM_ALLOCATION_BPS=2000 \
+            WALLET=/tmp/mamba-ci-wallet-does-not-exist.json \
+            npm run validate:launch:strict; then
+            echo "Strict readiness unexpectedly passed without governance."
+            exit 1
+          fi
+      - name: Strict readiness must reject missing wallet
+        run: |
+          if CLUSTER=devnet \
+            STRICT_LAUNCH=1 \
+            AUTHORITY_MULTISIG=11111111111111111111111111111111 \
+            DECIMALS=9 \
+            SUPPLY=1000 \
+            TRANSFER_FEE_BPS=0 \
+            TRANSFER_FEE_MAX_BASE_UNITS=18446744073709551615 \
+            TEAM_ALLOCATION_BPS=2000 \
+            WALLET=/tmp/mamba-ci-wallet-does-not-exist.json \
+            npm run validate:launch:strict; then
+            echo "Strict readiness unexpectedly passed without a wallet."
+            exit 1
+          fi

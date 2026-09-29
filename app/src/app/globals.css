@@ -128,3 +128,915 @@
     @apply font-sans;
   }
 }
+
+
+:root {
+  --mamba-black: #05070b;
+  --mamba-ink: #0b111a;
+  --mamba-blue: #1b66f5;
+  --mamba-cyan: #55d7ff;
+  /* Gold is brand only (the "Move" word, the snake's belly). Cautions use
+     warn, always with an icon, so the two never read as each other. */
+  --mamba-gold: #f5b84b;
+  --mamba-warn: #ff9e3d;
+  --mamba-text: #f2f6fa;
+  --mamba-muted: #a3b0bf;
+  --mamba-line: rgba(125, 200, 255, 0.14);
+  --mamba-glass: rgba(14, 22, 36, 0.52);
+  --mamba-glass-strong: rgba(10, 16, 28, 0.72);
+  --mamba-radius: 20px;
+  --mamba-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Primary actions: white text stays >= 4.75:1 across the whole ramp. */
+  --mamba-action: linear-gradient(135deg, #1552d6 0%, #1b66f5 60%, #226cec 100%);
+}
+
+/* One focus ring for every link and button on the page. */
+.mamba-shell :is(a, button):focus-visible {
+  outline: 2px solid var(--mamba-cyan);
+  outline-offset: 3px;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 88px;
+}
+body {
+  background: var(--mamba-black);
+  color: var(--mamba-text);
+}
+
+/* ---------- Page-wide 3D backdrop ---------- */
+
+.mamba-shell {
+  position: relative;
+  min-height: 100vh;
+  overflow-x: clip;
+  isolation: isolate;
+}
+.mamba-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background: radial-gradient(
+      ellipse 80% 60% at 70% 10%,
+      rgba(27, 102, 245, 0.16),
+      transparent 60%
+    ),
+    linear-gradient(180deg, #05070b 0%, #070b14 55%, #05070b 100%);
+}
+.mamba-aurora {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.55;
+  will-change: transform;
+}
+.mamba-aurora-a {
+  width: 46vw;
+  height: 46vw;
+  top: -14vw;
+  right: -8vw;
+  background: radial-gradient(circle, rgba(27, 102, 245, 0.55), transparent 65%);
+  animation: mamba-drift-a 22s ease-in-out infinite alternate;
+}
+.mamba-aurora-c {
+  width: 30vw;
+  height: 30vw;
+  bottom: -8vw;
+  right: 18vw;
+  background: radial-gradient(circle, rgba(85, 215, 255, 0.22), transparent 65%);
+  animation: mamba-drift-a 26s ease-in-out infinite alternate-reverse;
+}
+@keyframes mamba-drift-a {
+  to {
+    transform: translate3d(-6vw, 5vh, 0) scale(1.12);
+  }
+}
+@keyframes mamba-drift-b {
+  to {
+    transform: translate3d(8vw, -6vh, 0) scale(0.9);
+  }
+}
+
+/* Receding perspective grid "floor", scrolling toward the viewer. */
+.mamba-floor {
+  position: absolute;
+  left: -50%;
+  right: -50%;
+  bottom: -12vh;
+  height: 62vh;
+  background-image: linear-gradient(
+      rgba(85, 215, 255, 0.22) 1px,
+      transparent 1px
+    ),
+    linear-gradient(90deg, rgba(85, 215, 255, 0.22) 1px, transparent 1px);
+  background-size: 64px 64px;
+  transform: perspective(520px) rotateX(68deg);
+  transform-origin: 50% 100%;
+  -webkit-mask-image: linear-gradient(to top, black 10%, transparent 85%);
+  mask-image: linear-gradient(to top, black 10%, transparent 85%);
+  opacity: 0.35;
+  animation: mamba-floor 6s linear infinite;
+}
+@keyframes mamba-floor {
+  to {
+    background-position: 0 64px;
+  }
+}
+.mamba-noise {
+  position: absolute;
+  inset: 0;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ---------- Nav ---------- */
+
+.mamba-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  border-bottom: 1px solid var(--mamba-line);
+  background: rgba(5, 8, 13, 0.55);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  backdrop-filter: blur(16px) saturate(150%);
+}
+.mamba-nav-inner {
+  width: min(1240px, calc(100% - 48px));
+  height: 72px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.mamba-main {
+  width: min(1240px, calc(100% - 48px));
+  margin: 0 auto;
+}
+.mamba-brand {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  color: #fff;
+  font: 800 15px/1 var(--font-geist-sans), sans-serif;
+  letter-spacing: 0.22em;
+}
+.mamba-brand-mark {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--mamba-cyan);
+  border-radius: 7px;
+  background: linear-gradient(
+    135deg,
+    rgba(85, 215, 255, 0.22),
+    rgba(27, 102, 245, 0.12)
+  );
+  box-shadow: 0 0 18px rgba(85, 215, 255, 0.35);
+  transform: rotate(45deg);
+}
+.mamba-brand-mark > span {
+  color: var(--mamba-cyan);
+  font: 800 14px/1 var(--font-geist-sans), sans-serif;
+  letter-spacing: 0;
+  transform: rotate(-45deg);
+}
+.mamba-nav-links {
+  display: flex;
+  gap: 6px;
+  padding: 5px;
+  border: 1px solid var(--mamba-line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.mamba-nav-links a {
+  padding: 8px 16px;
+  border-radius: 999px;
+  color: #b4c0ce;
+  font: 600 13px/1 var(--font-geist-sans), sans-serif;
+  transition: background 0.2s, color 0.2s;
+}
+.mamba-nav-links a:hover {
+  background: rgba(85, 215, 255, 0.1);
+  color: #fff;
+}
+.mamba-nav-meta {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+.mamba-nav .wallet-adapter-button {
+  height: 40px;
+  padding: 0 20px;
+  border: 1px solid rgba(85, 215, 255, 0.45);
+  border-radius: 999px;
+  background: linear-gradient(
+    135deg,
+    rgba(27, 102, 245, 0.28),
+    rgba(85, 215, 255, 0.08)
+  );
+  color: #f5fbff;
+  font: 700 12px/1 var(--font-geist-sans), sans-serif;
+  letter-spacing: 0.02em;
+  box-shadow: 0 0 22px rgba(27, 102, 245, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  transition: box-shadow 0.25s, transform 0.25s;
+}
+/* One-off cue when someone heads to the wallet while disconnected. */
+.mamba-nav .wallet-adapter-button.is-cue {
+  animation: mamba-cue 0.6s var(--mamba-ease) 2;
+}
+@keyframes mamba-cue {
+  50% {
+    box-shadow: 0 0 0 6px rgba(85, 215, 255, 0.4),
+      0 0 36px rgba(27, 102, 245, 0.7);
+    transform: scale(1.05);
+  }
+}
+.mamba-nav .wallet-adapter-button:not([disabled]):hover {
+  background: linear-gradient(135deg, var(--mamba-blue), #2f8cff);
+  box-shadow: 0 0 32px rgba(27, 102, 245, 0.55);
+  transform: translateY(-1px);
+}
+
+/* ---------- Hero ---------- */
+
+.mamba-hero {
+  min-height: calc(100svh - 72px);
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  grid-template-rows: 1fr auto;
+  align-items: center;
+  padding-bottom: 28px;
+  position: relative;
+}
+.mamba-hero-copy {
+  position: relative;
+  z-index: 1;
+  padding: 40px 0 32px;
+}
+/* Empty on purpose: open ground for the roaming snake. */
+.mamba-hero-stage {
+  align-self: stretch;
+}
+.mamba-hero-strip {
+  grid-column: 1 / -1;
+  position: relative;
+  z-index: 1;
+}
+.mamba-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border: 1px solid var(--mamba-line);
+  border-radius: 999px;
+  background: var(--mamba-glass);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  color: #c6d3e0;
+  font: 600 13px/1 var(--font-geist-sans), sans-serif;
+}
+.mamba-chip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #69e5a4;
+  box-shadow: 0 0 0 0 rgba(105, 229, 164, 0.6);
+  animation: mamba-ping 2s var(--mamba-ease) infinite;
+}
+.mamba-chip-sep {
+  width: 1px;
+  height: 11px;
+  background: var(--mamba-line);
+}
+@keyframes mamba-ping {
+  70%,
+  100% {
+    box-shadow: 0 0 0 8px rgba(105, 229, 164, 0);
+  }
+}
+.mamba-chip-dot.is-test {
+  background: var(--mamba-warn);
+  box-shadow: 0 0 10px rgba(255, 158, 61, 0.6);
+  animation: none;
+}
+.mamba-hero h1 {
+  max-width: 660px;
+  margin: 28px 0 24px;
+  color: #f7fafc;
+  font: 800 clamp(56px, 8vw, 112px) / 0.92 var(--font-geist-sans), sans-serif;
+  letter-spacing: -0.055em;
+}
+/* Gradient text only paints inside the element box, and the tight
+   letter-spacing makes glyphs overhang it; pad the box without shifting layout. */
+.mamba-hero h1 em,
+.mamba-h1-glow {
+  padding-right: 0.08em;
+  margin-right: -0.08em;
+  padding-bottom: 0.06em;
+}
+.mamba-hero h1 em {
+  font-style: normal;
+  /* Seamless tile: starts and ends on the same color with evenly spaced
+     stops, and the animation shifts by exactly one tile, so the loop never
+     jumps. */
+  background: linear-gradient(
+    90deg,
+    #f0a53a 0%,
+    #f5b84b 12.5%,
+    #ffd98a 25%,
+    #f5b84b 37.5%,
+    #f0a53a 50%,
+    #e8932b 62.5%,
+    #e38a26 75%,
+    #e8932b 87.5%,
+    #f0a53a 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: repeat-x;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: mamba-shimmer 8s linear infinite;
+}
+.mamba-h1-glow {
+  background: linear-gradient(180deg, #ffffff 30%, #9fdcff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 28px rgba(85, 215, 255, 0.28));
+}
+@keyframes mamba-shimmer {
+  /* With a 200%-wide tile, 200% shifts the image by exactly one tile. */
+  from {
+    background-position: 0% 0;
+  }
+  to {
+    background-position: 200% 0;
+  }
+}
+.mamba-hero-description {
+  max-width: 430px;
+  color: #a9b5c3;
+  font: 400 17px/1.65 var(--font-geist-sans), sans-serif;
+}
+.mamba-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-top: 38px;
+}
+.mamba-primary-link,
+.mamba-ghost-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  height: 50px;
+  padding: 0 24px;
+  border-radius: 14px;
+  font: 700 14px/1 var(--font-geist-sans), sans-serif;
+  transition: transform 0.25s var(--mamba-ease), box-shadow 0.25s,
+    background 0.25s, border-color 0.25s;
+}
+.mamba-primary-link {
+  position: relative;
+  background: var(--mamba-action);
+  color: #fff;
+  /* Cyan now lives in the rim, not behind the label. */
+  box-shadow: 0 10px 34px rgba(27, 102, 245, 0.45),
+    inset 0 1px 0 rgba(85, 215, 255, 0.5);
+}
+.mamba-primary-link:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 44px rgba(27, 102, 245, 0.6),
+    inset 0 1px 0 rgba(85, 215, 255, 0.5);
+}
+.mamba-ghost-link {
+  border: 1px solid var(--mamba-line);
+  background: var(--mamba-glass);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  color: #dbe6f1;
+}
+.mamba-ghost-link:hover {
+  transform: translateY(-2px);
+  border-color: rgba(85, 215, 255, 0.4);
+}
+
+/* Fixed layer the snake roams: above the backdrop, beneath all content,
+   and never intercepting clicks. */
+.mamba-snake-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+.mamba-main {
+  position: relative;
+  z-index: 1;
+}
+
+/* ---------- Live on-chain strip ---------- */
+
+/* Strong glass (not the lighter chip/button glass): text on it stays
+   readable even with the bright snake passing behind. */
+.mamba-chain {
+  border: 1px solid var(--mamba-line);
+  border-radius: 18px;
+  background: var(--mamba-glass-strong);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  backdrop-filter: blur(16px) saturate(140%);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+.mamba-chain-empty,
+.mamba-chain-error {
+  margin: 0;
+  padding: 20px 24px;
+  color: #aab7c3;
+  font: 400 14px/1.5 var(--font-geist-sans), sans-serif;
+}
+.mamba-chain-error {
+  color: #ff9a8a;
+}
+.mamba-chain-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 24px 0;
+  color: var(--mamba-cyan);
+  font: 600 13px/1 var(--font-geist-sans), sans-serif;
+}
+.mamba-chain-live {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--mamba-cyan);
+  box-shadow: 0 0 8px var(--mamba-cyan);
+}
+.mamba-chain-cells {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.mamba-chain-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 24px 18px;
+  border-right: 1px solid var(--mamba-line);
+}
+.mamba-chain-cell:last-child {
+  border-right: 0;
+}
+.mamba-chain-label {
+  color: var(--mamba-muted);
+  font: 700 12px/1 var(--font-geist-mono), monospace;
+  letter-spacing: 0.12em;
+}
+.mamba-chain-value {
+  color: #f4f7f9;
+  font: 700 20px/1.1 var(--font-geist-sans), sans-serif;
+  letter-spacing: -0.01em;
+}
+.mamba-chain-note {
+  font: 600 12px/1.3 var(--font-geist-sans), sans-serif;
+}
+.mamba-chain-note.is-ok {
+  color: #69e5a4;
+}
+.mamba-chain-note.is-warn {
+  color: var(--mamba-warn);
+}
+.mamba-chain-note svg {
+  display: inline-block;
+  margin: -2px 5px 0 0;
+  vertical-align: middle;
+}
+.mamba-chain-note.is-muted {
+  color: var(--mamba-muted);
+}
+.mamba-skeleton {
+  display: inline-block;
+  width: 84px;
+  height: 20px;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    rgba(125, 200, 255, 0.08),
+    rgba(125, 200, 255, 0.2),
+    rgba(125, 200, 255, 0.08)
+  );
+  background-size: 200% 100%;
+  animation: mamba-skeleton 1.2s linear infinite;
+}
+@keyframes mamba-skeleton {
+  to {
+    background-position: -200% 0;
+  }
+}
+.mamba-chain-mint {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 24px;
+  border-top: 1px solid var(--mamba-line);
+}
+.mamba-chain-mint code {
+  color: #dbe6f1;
+  font: 600 13px/1 var(--font-geist-mono), monospace;
+}
+.mamba-chain-mint button,
+.mamba-chain-mint a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--mamba-line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #b4c0ce;
+  font: 600 12px/1 var(--font-geist-sans), sans-serif;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+.mamba-chain-mint button:hover,
+.mamba-chain-mint a:hover {
+  border-color: rgba(85, 215, 255, 0.45);
+  color: #fff;
+}
+
+/* ---------- Workspace ---------- */
+
+.mamba-workspace {
+  padding: 96px 0 0;
+}
+.mamba-section-heading {
+  margin-bottom: 32px;
+}
+.mamba-section-heading p {
+  margin: 12px 0 0;
+  color: var(--mamba-muted);
+  font: 400 16px/1.5 var(--font-geist-sans), sans-serif;
+}
+.mamba-section-heading h2 {
+  margin: 0;
+  color: #f4f7f9;
+  font: 800 clamp(34px, 4.5vw, 48px) / 1 var(--font-geist-sans), sans-serif;
+  letter-spacing: -0.045em;
+}
+/* Wallet console: balance (5) beside send (7). */
+.mamba-panels {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  align-items: stretch;
+  gap: 20px;
+}
+.mamba-panel {
+  min-width: 0;
+  position: relative;
+  border: 1px solid var(--mamba-line);
+  border-radius: var(--mamba-radius);
+  background: var(--mamba-glass-strong);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  backdrop-filter: blur(20px) saturate(140%);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+.mamba-panel::before {
+  /* Gradient hairline along the top edge. */
+  content: "";
+  position: absolute;
+  inset: 0 24px auto;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(85, 215, 255, 0.6),
+    transparent
+  );
+}
+.mamba-panel-glare {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.mamba-panel-balance {
+  border-color: rgba(85, 215, 255, 0.3);
+  /* Blue tint over strong glass (muted text >= 4.9:1 over the snake). */
+  background: linear-gradient(140deg, rgba(27, 102, 245, 0.22), transparent 60%),
+    var(--mamba-glass-strong);
+}
+.mamba-panel-balance {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 220px;
+}
+/* Top-aligned like the send panel, so the two read as one console. */
+.mamba-balance-value {
+  margin: 10px 0 0;
+  color: #f4f7f9;
+  font: 700 clamp(34px, 3.4vw, 44px) / 1.05 var(--font-geist-sans), sans-serif;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.mamba-balance-value > span:not(.mamba-skeleton) {
+  color: var(--mamba-muted);
+  font-size: 0.42em;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.mamba-balance-value.is-ghost {
+  color: rgba(244, 247, 249, 0.35);
+}
+.mamba-balance-value .mamba-skeleton {
+  width: 160px;
+  height: 36px;
+}
+.mamba-connect-hint {
+  max-width: 36ch;
+  margin: 16px 0 0;
+  color: #c9d4df;
+  font: 500 15px/1.5 var(--font-geist-sans), sans-serif;
+}
+.mamba-connect-hint svg {
+  display: inline-block;
+  margin: -3px 0 0 4px;
+  vertical-align: middle;
+  color: var(--mamba-cyan);
+}
+/* Keep the send form a sensible width even in a wide panel. */
+.mamba-panel-send form {
+  max-width: 560px;
+}
+/* Leave room for the corner icon so the heading text never runs under it. */
+.mamba-panel.mamba-panel-send > div:not(.mamba-panel-icon):not(.mamba-panel-glare) {
+  padding-right: 76px !important;
+}
+
+/* ---------- Contract details ---------- */
+
+/* Open ground for the snake between the wallet and contract sections. */
+.mamba-gap-stage {
+  height: 180px;
+}
+/* Card on the left, an empty stage column for the snake on the right. */
+.mamba-contract {
+  display: grid;
+  grid-template-columns: minmax(0, 820px) minmax(0, 1fr);
+  gap: 32px;
+  padding: 0 0 110px;
+}
+.mamba-contract-stage {
+  min-height: 320px;
+}
+.mamba-token-mint {
+  display: grid;
+  gap: 8px;
+  margin-top: 22px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--mamba-line);
+}
+.mamba-token-mint code {
+  color: #f2f6f8;
+  font: 600 14px/1.5 var(--font-geist-mono), monospace;
+  overflow-wrap: anywhere;
+}
+.mamba-token-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.mamba-token-actions button,
+.mamba-panel .mamba-token-actions a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--mamba-line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #dbe6f1;
+  font: 600 13px/1 var(--font-geist-sans), sans-serif;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+.mamba-token-actions button:hover,
+.mamba-panel .mamba-token-actions a:hover {
+  border-color: rgba(85, 215, 255, 0.45);
+  color: #fff;
+}
+.mamba-panel .border-border {
+  border-color: var(--mamba-line);
+}
+.mamba-panel-icon {
+  position: absolute;
+  z-index: 2;
+  top: 22px;
+  right: 23px;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: rgba(85, 215, 255, 0.1);
+  color: var(--mamba-cyan);
+}
+.mamba-panel .text-card-foreground,
+.mamba-panel .text-foreground {
+  color: #f2f6f8;
+}
+.mamba-panel .text-muted-foreground {
+  color: #aab7c3;
+}
+.mamba-panel a {
+  color: #7de2ff;
+}
+.mamba-panel input {
+  height: 44px;
+  border-color: rgba(125, 226, 255, 0.22);
+  border-radius: 12px;
+  background: rgba(3, 7, 12, 0.6);
+  color: #f2f6f8;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.mamba-panel input:focus-visible {
+  border-color: rgba(85, 215, 255, 0.6);
+  box-shadow: 0 0 0 3px rgba(85, 215, 255, 0.15);
+}
+.mamba-panel input::placeholder {
+  color: #9aa9ba;
+}
+.mamba-panel button[type="submit"] {
+  height: 46px;
+  border-radius: 12px;
+  background: var(--mamba-action);
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 10px 28px rgba(27, 102, 245, 0.4),
+    inset 0 1px 0 rgba(85, 215, 255, 0.5);
+}
+.mamba-panel button[type="submit"]:disabled {
+  box-shadow: none;
+}
+.mamba-panel button[type="button"] {
+  color: var(--mamba-cyan);
+}
+/* Flatten the shadcn card chrome; the glass panel provides it. */
+.mamba-panel > div:not(.mamba-panel-icon):not(.mamba-panel-glare) {
+  position: relative;
+  z-index: 1;
+  max-width: none !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 28px !important;
+}
+
+/* ---------- Footer ---------- */
+
+.mamba-footer {
+  display: flex;
+  justify-content: space-between;
+  padding: 24px 0 30px;
+  border-top: 1px solid var(--mamba-line);
+  color: var(--mamba-muted);
+  font: 400 13px/1.4 var(--font-geist-sans), sans-serif;
+}
+
+/* ---------- Motion + responsive ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .mamba-aurora,
+  .mamba-floor,
+  .mamba-chip-dot,
+  .mamba-skeleton,
+  .mamba-nav .wallet-adapter-button.is-cue,
+  .mamba-hero h1 em {
+    animation: none;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+  /* No pulse: just hold a ring while the cue is on. */
+  .mamba-nav .wallet-adapter-button.is-cue {
+    box-shadow: 0 0 0 3px rgba(85, 215, 255, 0.7);
+  }
+}
+
+@media (max-width: 900px) {
+  .mamba-nav-links {
+    display: none;
+  }
+  .mamba-hero {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+    min-height: auto;
+  }
+  .mamba-hero-copy {
+    padding: 48px 0 0;
+  }
+  /* On narrow screens the snake gets a strip below the copy instead. */
+  .mamba-hero-stage {
+    min-height: 180px;
+  }
+  .mamba-chain-cells {
+    grid-template-columns: 1fr 1fr;
+  }
+  .mamba-contract {
+    grid-template-columns: 1fr;
+  }
+  .mamba-contract-stage {
+    display: none;
+  }
+  .mamba-chain-cell:nth-child(2) {
+    border-right: 0;
+  }
+  .mamba-chain-cell:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--mamba-line);
+  }
+}
+
+@media (max-width: 560px) {
+  .mamba-main,
+  .mamba-nav-inner {
+    width: calc(100% - 32px);
+  }
+  .mamba-nav-inner {
+    height: 64px;
+  }
+  .mamba-hero h1 {
+    font-size: clamp(44px, 13vw, 64px);
+  }
+  .mamba-hero-copy {
+    padding-top: 32px;
+  }
+  .mamba-hero-actions > a {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+  /* Compact label/value list. */
+  .mamba-chain-cells {
+    grid-template-columns: 1fr;
+  }
+  .mamba-chain-cell {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: baseline;
+    gap: 2px 12px;
+    padding: 10px 18px;
+    border-right: 0;
+    border-bottom: 1px solid var(--mamba-line);
+  }
+  .mamba-chain-value {
+    font-size: 15px;
+    text-align: right;
+  }
+  .mamba-chain-note {
+    grid-column: 1 / -1;
+  }
+  .mamba-chain-head,
+  .mamba-chain-mint {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+  .mamba-chain-mint {
+    flex-wrap: wrap;
+  }
+  .mamba-workspace {
+    padding: 72px 0 0;
+  }
+  .mamba-gap-stage {
+    height: 120px;
+  }
+  .mamba-contract {
+    padding: 0 0 72px;
+  }
+  .mamba-panels {
+    grid-template-columns: 1fr;
+  }
+  .mamba-panel-balance {
+    min-height: 160px;
+  }
+  .mamba-panel > div:not(.mamba-panel-icon):not(.mamba-panel-glare) {
+    padding: 22px !important;
+  }
+  .mamba-footer {
+    gap: 14px;
+    flex-direction: column;
+  }
+}
