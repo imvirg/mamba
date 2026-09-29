@@ -1,6 +1,10 @@
 import { Connection } from "@solana/web3.js";
 import { resolveClusterEndpoint } from "./lib/solana";
-import { loadLaunchState, updateLaunchState } from "./lib/launch-state-store";
+import {
+  loadLaunchState,
+  updateLaunchState,
+  withLaunchStateLock,
+} from "./lib/launch-state-store";
 import {
   hasRejectedTransactions,
   hasUnknownTransactions,
@@ -15,8 +19,7 @@ function requireStatePath(): string {
   return args[1];
 }
 
-async function main(): Promise<void> {
-  const statePath = requireStatePath();
+async function reconcile(statePath: string): Promise<void> {
   const state = loadLaunchState(statePath);
   const pendingTransactions = Object.values(state.transactions).filter(
     (transaction) => transaction?.outcome === "unknown" && transaction.signature
@@ -39,8 +42,11 @@ async function main(): Promise<void> {
     resolveClusterEndpoint(state.cluster),
     "confirmed"
   );
+  // Without history search the RPC only knows the last few minutes of
+  // signatures, so anything from an earlier run would stay unknown forever.
   const statuses = await connection.getSignatureStatuses(
-    pendingTransactions.map((transaction) => transaction!.signature!)
+    pendingTransactions.map((transaction) => transaction!.signature!),
+    { searchTransactionHistory: true }
   );
   const statusesBySignature = new Map(
     pendingTransactions.map((transaction, index) => [
@@ -80,6 +86,11 @@ async function main(): Promise<void> {
   } else if (hasRejectedTransactions(finalState.transactions)) {
     process.exitCode = 2;
   }
+}
+
+async function main(): Promise<void> {
+  const statePath = requireStatePath();
+  await withLaunchStateLock(statePath, () => reconcile(statePath));
 }
 
 main().catch((error: unknown) => {

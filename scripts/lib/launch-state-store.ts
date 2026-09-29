@@ -164,6 +164,9 @@ export function updateLaunchState(
   }
 }
 
+// Held for a whole launch or reconcile run so two processes never drive the
+// same launch at once. Separate from the short-lived `.lock` that
+// updateLaunchState takes around each write, which runs inside this one.
 export async function withLaunchStateLock<T>(
   filePath: string,
   operation: () => Promise<T>
@@ -171,7 +174,7 @@ export async function withLaunchStateLock<T>(
   if (!path.isAbsolute(filePath)) {
     throw new Error("Launch state path must be absolute");
   }
-  const lockPath = `${filePath}.lock`;
+  const lockPath = `${filePath}.run.lock`;
   fs.mkdirSync(lockPath, { mode: 0o700 });
   try {
     return await operation();

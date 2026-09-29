@@ -6,6 +6,7 @@ import {
   createLaunchState,
   loadLaunchState,
   updateLaunchState,
+  withLaunchStateLock,
 } from "../scripts/lib/launch-state-store";
 import { LaunchState } from "../scripts/lib/launch-state";
 
@@ -151,5 +152,34 @@ describe("launch state store", () => {
     expect(() => loadLaunchState(linkPath)).to.throw(
       "Launch state is not a regular file"
     );
+  });
+
+  it("saves state while a whole launch run holds its lock", async () => {
+    const filePath = statePath("run-lock.json");
+    createLaunchState(filePath, makeState());
+
+    await withLaunchStateLock(filePath, async () => {
+      updateLaunchState(filePath, (state) => ({ ...state, phase: "blocked" }));
+    });
+
+    expect(loadLaunchState(filePath).phase).to.equal("blocked");
+    expect(fs.existsSync(`${filePath}.run.lock`)).to.equal(false);
+    expect(fs.existsSync(`${filePath}.lock`)).to.equal(false);
+  });
+
+  it("refuses a second run on the same launch", async () => {
+    const filePath = statePath("second-run.json");
+    createLaunchState(filePath, makeState());
+
+    let secondRunError: unknown;
+    await withLaunchStateLock(filePath, async () => {
+      try {
+        await withLaunchStateLock(filePath, async () => undefined);
+      } catch (error) {
+        secondRunError = error;
+      }
+    });
+
+    expect(String(secondRunError)).to.contain("EEXIST");
   });
 });
