@@ -16,3 +16,6 @@ mamba/**
 !mamba/MAMBA-logo-mascot/mascot_512.png
 !mamba/metadata.json
 !mamba/audit-readiness.md
+
+# Throwaway keypairs the readiness tests write (removed after each test)
+tests/.mamba-*.json
